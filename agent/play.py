@@ -23,11 +23,29 @@ urllib. No third-party requirement.
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import traceback
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if AGENT_DIR not in sys.path:
+    sys.path.insert(0, AGENT_DIR)
+
+try:
+    import planner
+except Exception:  # pragma: no cover - import path depends on invocation style
+    from agent import planner  # type: ignore
+
+try:
+    import metrics as metrics_mod
+    import coach as coach_mod
+except Exception:  # pragma: no cover - end-of-run learning is best-effort
+    metrics_mod = None
+    coach_mod = None
 
 try:
     from kb import lookup as kb_lookup
@@ -113,6 +131,9 @@ DEFAULTS = {
     "VISION_EVERY": int(os.environ.get("VISION_EVERY", "5")),
 }
 
+PLAYBOOK_PATH = os.path.join(AGENT_DIR, "playbook.json")
+METRICS_CSV_PATH = os.path.join(AGENT_DIR, "metrics.csv")
+
 # Bounded network timeouts (connect, read) seconds.
 BRIDGE_TIMEOUT = (5, 30)
 OLLAMA_TIMEOUT = (10, 300)  # local LLM inference can be slow; generous read timeout.
@@ -129,159 +150,64 @@ MAX_CONSECUTIVE_ERRORS = 4
 # ~1.5-2k tokens so it fits comfortably in the 16k context.
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
-You are the operator for a Timberborn beaver colony. You are a PLANFUL operator:
-you hold a simple layout plan a few buildings ahead (where water, housing, farms,
-paths, and future amenities go) and execute toward it ONE JSON action per turn. The
-bridge validates every action and returns teaching errors (with a nearest valid
-tile) you correct next turn. When unsure of a tile, use the suggested one.
+You operate a Timberborn colony through the bridge. Each turn you receive STATE
+with ALERTS, a PLANNER block, KB rules, optional VISION, and recent Action results.
 
-DECISION LOOP (each turn):
-1. You are given the current digested colony state (population, resources with
-   days_remaining, weather forecast, buildings), a compact map summary, candidate
-   placement tiles, and KB rules retrieved for the current situation.
-2. Keep/refresh a short layout plan: the next 3-4 buildings AND roughly where they
-   go, chosen so survival needs are met AND the colony stays connected and
-   expandable (see COLONY LAYOUT).
-3. Make exactly ONE JSON action that advances that plan (usually the next building
-   or a Path to connect it). If prep is done and nothing is understocked, call
-   set_speed to advance time and re-check.
-4. You will see the action result next turn; iterate.
+Contract:
+- ALERTS are triage truth. Fix severe survival/pathing alerts before expansion.
+- PLANNER is your menu: choose actions only from its goals and candidates. Do not
+  invent coordinates when planner candidates exist.
+- Planner candidates are pre-validated for reachability; bridge validation is
+  still final. If a result includes a suggestion, use it next turn.
+- Construction is real: place_building creates a site needing logs and build time.
+  Queue only useful sites, then set_speed to let beavers haul/build.
+- Order matters. For a building plus path stub, place the building first, then the
+  path stub. Path before the served building is wrong for this queue.
+- Include set_speed as the LAST action when construction should proceed or the
+  planner says to advance time.
+- Demolish unreachable buildings when planner says so.
 
-CONSTRUCTION IS REAL (this is the game loop — respect it):
-  - place_building creates a CONSTRUCTION SITE, not a finished building. Beavers
-    must HAUL materials (mostly Logs) to it and BUILD it over time. It does nothing
-    until built. Placing 20 sites at once does NOT build them — they just queue.
-  - Buildings COST resources (Logs, later Planks). You start with almost none. You
-    cannot build what you cannot pay for: watch the Logs stock in RESOURCES.
-  - So the real early loop is: place a FEW free/cheap things (Path, GathererFlag,
-    Lumberjack/Forester flags are free), then set_speed 3-5 to let beavers gather
-    Logs and build, then re-check and place the next thing you can now afford.
-  - Advancing TIME is a first-class action. If nothing is affordable or sites are
-    still under construction, call set_speed to let beavers work, then reassess.
-    Do not keep placing sites you can't pay for.
-  - Secure LOG PRODUCTION early (Lumberjack cuts existing trees; Forester replants)
-    or everything else stalls for lack of materials.
-
-COLONY LAYOUT (plan ahead - do NOT just react to the immediate gap):
-  - Think a few steps ahead like a town plan: decide roughly where water
-    infrastructure, housing, farms, storage, and later amenities will sit BEFORE
-    placing, so you don't box yourself in.
-  - Cluster by function and CONNECT with Paths as you go (nothing works off-path):
-    water (WaterPump + SmallTanks) on the river edge; housing (Lodges) clustered
-    near the district center and workplaces; farms on moist soil near the water;
-    storage central.
-  - Leave room to EXPAND: droughts lengthen, so reserve space for more tanks each
-    cycle, and a spot for wellbeing/amenity buildings to add once thirst+hunger+
-    shelter are secured.
-  - Minimize beaver travel: put workplaces near housing and the goods they use.
-  - Lay the Path that connects a new building in the same few turns you place it.
-
-PLACEMENT + PATHING (use the compact map summary; never guess blindly):
-  - Always place with z = terrain_height for that exact map tile. Coordinates are
-    place_building x=<map x>, y=<map y>, z=<terrain_height>.
-  - WaterPump: place ONLY on a clean-water edge: a free LAND tile adjacent to
-    water_depth>0 AND contamination==0. NEVER place a pump on/next to badwater
-    contamination>0, and never place a pump on an occupied tile.
-  - SmallTank, Lodge, SmallWarehouse, LogPile, Inventor: place on flat, dry,
-    uncontaminated, unoccupied land near the WaterPump and district center.
-  - EfficientFarmhouse and crop support: place near moist/farmable soil; farms
-    belong on moist soil with nearby path access.
-  - Path: every WaterPump, tank, lodge, storage, farmhouse, gatherer, lumberjack,
-    and inventor must connect back to the District Center by Path. If a new
-    building is not connected, place Path toward it before unrelated work.
-  - Prefer compact rows and short path spines near the district center. Leave
-    expansion slots for more tanks and more lodges; do not scatter buildings.
-  - If /act returns invalid_placement with suggestion.nearest_valid, your NEXT
-    place_building action should reuse exactly that x,y,z,orientation unless it
-    would violate clean-water/badwater rules.
-  - Prefer the listed candidate tiles from the map summary. If candidates exist
-    for the needed building, use one of them exactly.
-
-SURVIVAL PRIORITY (satisfy top-down; never let a lower need steal labor from an
-unmet higher one):
-  THIRST (water) > HUNGER (food) > SLEEP/SHELTER (housing) > wellbeing/expansion.
-Thirst is the emergency: an empty thirst bar kills a beaver in ~4.3 days and
-empties whenever no drinkable water is reachable. Water outage during drought is
-the #1 cause of colony death.
-
-CORE NUMBERS (per beaver/day): water 2.13, food 2.67.
-Let P = population.total and D = duration_days of the NEXT hazard from the forecast.
-  needed_water = (D + 2) * 2.13 * P   (in TANKS — river/pump water does NOT count)
-  needed_food  = (D + 2) * 2.67 * P
-The bridge already computes each resource's days_remaining; compare it to
-(D + 2). If a resource's days_remaining < D + 2, that resource is UNDERSTOCKED —
-fix it before any expansion or wellbeing building.
-
-WEATHER: game starts temperate. Each cycle = temperate then a hazard.
-  - DROUGHT: water sources stop; only water already in TANKS is safe (tanks never
-    evaporate; reservoirs do). Crops stop growing unless irrigated.
-  - BADTIDE: river turns contaminated; pumps can't supply drinkable water. Enter
-    with tanks FULL of clean temperate water; do not pump into drinking storage
-    while contaminated. Contamination is catastrophic for beavers.
-Droughts LENGTHEN across a run — read D from the forecast every cycle; expand
-water storage each cycle, never just maintain it.
-
-BUILD ORDER (early game, until first drought is survivable). Use these spec ids
-with place_building. Only build the NEXT missing survival item:
-  1. Path            — connect buildings; nothing works off-path.
-  2. WaterPump       — 12 logs, on river edge depth<=2. Gets clean water flowing.
-  3. SmallTank       — 15 logs, cap 30, no evaporation. Drought insurance. Build
-                       ceil(needed_water / 30) of them.
-  4. Lodge           — 12 logs, houses 3. One per 3 beavers (satisfies sleep).
-  5. GathererFlag    — free, 1 worker. Immediate wild-berry food.
-  6. EfficientFarmhouse — 25 logs, 3 farmers. Plant carrots (4-day cycle); bank a
-                       harvest before drought.
-  7. SmallWarehouse  — stores logs/goods so production isn't buffer-capped.
-  8. Inventor        — science; ONLY after water+food+housing are secured.
-  9. Dam (20 logs) / MediumTank (needs science, cap 300) — secondary water reserve.
-Keep a Lumberjack + Forester loop so logs (the master resource) never hit zero.
-
-RULES OF THUMB:
-  - If any resource days_remaining < D + 2 while temperate: build/fill storage NOW.
-    You cannot fill tanks during a drought (no flowing water).
-  - Keep beds >= population; a homeless beaver loses sleep and (Folktails) stops
-    breeding.
-  - Only allow population growth when BOTH water and food cover (D + 2) days for P.
-  - Keep the game paused (speed 0) while you build; use set_speed 2-4 to advance a
-    bit when prep is done, then it re-pauses and you re-check.
-
-COORDINATES (important):
-  - Tiles are (x, y, z) where x,y are the HORIZONTAL plane and z is HEIGHT.
-  - The map gives tiles as x=origin.x+col and y=origin.z+row; z is
-    terrain_height[index]. BUILD NEAR the district center but use the tile's own
-    terrain_height — do NOT use z=0 and do NOT blindly reuse district_center.z.
-  - A bad placement returns error "invalid_placement" with
-    suggestion.nearest_valid {x,y,z,orientation}. On your NEXT turn, retry
-    place_building with exactly that suggested tile.
-  - Spec ids are simple names (WaterPump, SmallTank, Lodge, Path, ...) — no faction
-    suffix needed.
-
-OUTPUT:
-  - Output ONLY one JSON object: {"reasoning": string, "action": string, "args": object}.
-  - Make exactly ONE action per turn — do not narrate a plan without acting.
-  - If a command returns "not_implemented", pick a different action; that command
-    is not live yet in this bridge build.
-  - If a command returns "invalid_placement" with suggestion.nearest_valid
-    {x,y,z,orientation}, reuse exactly that suggested x,y,z,orientation next turn.
+Actions: set_speed, place_building, demolish, set_priority, save, noop.
+Return only JSON matching the schema: {"plan": string, "actions": [1 to 8 action
+objects]}, where each action object is {"action": string, "args": object}.
 """
 
 
 # ---------------------------------------------------------------------------
-# Ollama structured-output schema. The model must choose one action object; the
-# bridge still validates command-specific args and returns teaching errors.
+# Ollama structured-output schema. The model chooses an ordered queue; the bridge
+# still validates command-specific args and returns teaching errors.
 # ---------------------------------------------------------------------------
 ACTION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "reasoning": {"type": "string"},
-        "action": {
-            "type": "string",
-            "enum": ["set_speed", "place_building", "demolish", "save", "noop"],
+        "plan": {"type": "string"},
+        "actions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "set_speed",
+                            "place_building",
+                            "demolish",
+                            "set_priority",
+                            "save",
+                            "noop",
+                        ],
+                    },
+                    "args": {"type": "object"},
+                },
+                "required": ["action", "args"],
+            },
         },
-        "args": {"type": "object"},
     },
-    "required": ["reasoning", "action", "args"],
+    "required": ["plan", "actions"],
 }
 
 # Map each action name -> the /act command string the bridge expects, plus how to
@@ -292,6 +218,7 @@ ACTION_TO_ACT = {
     # nested position{x,y,z}, and nulls, and returns a nearest-valid suggestion.
     "place_building": ("place_building", lambda a: dict(a)),
     "demolish": ("demolish", lambda a: dict(a)),
+    "set_priority": ("set_priority", lambda a: dict(a)),
     "save": ("save", lambda a: {"name": a.get("name", "agent")}),
 }
 
@@ -744,13 +671,13 @@ def compact_map_summary(map_data, state, next_spec):
     return {"text": "COMPACT MAP:\n" + "\n".join(lines), "candidates": candidates}
 
 
-def kb_query_for_state(state, next_spec):
+def kb_query_for_state(state, top_goal_id):
     if not isinstance(state, dict):
         return "starter base water food housing path planning"
     alerts = []
     for alert in state.get("alerts", []) or []:
         if isinstance(alert, dict):
-            alerts.append(str(alert.get("message") or alert.get("id") or ""))
+            alerts.append(str(alert.get("id") or alert.get("message") or ""))
         else:
             alerts.append(str(alert))
     weather = (state.get("weather", {}) or {})
@@ -761,7 +688,7 @@ def kb_query_for_state(state, next_spec):
     return " ".join(
         [
             "current situation",
-            "next building %s" % next_spec,
+            "top planner goal %s" % (top_goal_id or "bootstrap"),
             "alerts %s" % " ".join(alerts[:4]),
             "weather current %s next %s duration %s"
             % (weather.get("current", ""), nxt.get("type", ""), nxt.get("duration_days", "")),
@@ -805,15 +732,32 @@ def state_summary_for_journal(state):
                 "days_remaining": r.get("days_remaining"),
             }
     w = state.get("weather", {}) or {}
+    buildings = state.get("buildings", {}) or {}
+    building_list = []
+    if isinstance(buildings.get("list"), list):
+        for item in buildings.get("list") or []:
+            if not isinstance(item, dict):
+                continue
+            building_list.append(
+                {
+                    "spec": item.get("spec"),
+                    "status": item.get("status"),
+                    "reachable": item.get("reachable"),
+                }
+            )
     return {
         "time": state.get("time"),
         "weather_current": w.get("current"),
         "weather_next": w.get("next"),
         "population_total": p.get("total"),
         "resources": res,
-        "under_construction": (state.get("buildings", {}) or {}).get(
-            "under_construction"
-        ),
+        "buildings": {
+            "counts": buildings.get("counts") if isinstance(buildings, dict) else {},
+            "list": building_list,
+            "under_construction": buildings.get("under_construction") if isinstance(buildings, dict) else None,
+        },
+        "under_construction": buildings.get("under_construction") if isinstance(buildings, dict) else None,
+        "alerts": state.get("alerts", []) if isinstance(state.get("alerts"), list) else [],
     }
 
 
@@ -861,10 +805,10 @@ def first_json_object_block(text):
 
 
 def parse_action_message(message):
-    """Parse Ollama message.content into {"reasoning", "action", "args"}.
+    """Parse Ollama message.content into {"plan", "actions"}.
 
     If the model somehow violates the schema, fall back to the first JSON object
-    embedded in content. If that also fails, return a local noop.
+    embedded in content. If that also fails, return a local noop queue.
     """
     content = (message or {}).get("content", "")
     raw = content if isinstance(content, str) else json.dumps(content, default=str)
@@ -882,29 +826,111 @@ def parse_action_message(message):
 
     if not isinstance(parsed, dict):
         return {
-            "reasoning": "Model response was not valid JSON; defaulting to noop.",
-            "action": "noop",
-            "args": {},
+            "plan": "Model response was not valid JSON; defaulting to noop.",
+            "actions": [{"action": "noop", "args": {}}],
             "raw": raw,
             "parse_error": True,
         }
 
-    reasoning = parsed.get("reasoning", "")
-    action = parsed.get("action")
-    args = parsed.get("args", {})
-    if not isinstance(reasoning, str):
-        reasoning = json.dumps(reasoning, default=str)
-    if action not in ACTION_SCHEMA["properties"]["action"]["enum"]:
+    plan = parsed.get("plan", "")
+    actions = parsed.get("actions")
+    if not isinstance(plan, str):
+        plan = json.dumps(plan, default=str)
+    if not isinstance(actions, list):
         return {
-            "reasoning": "Model returned an unknown action; defaulting to noop.",
-            "action": "noop",
-            "args": {},
+            "plan": "Model returned no action queue; defaulting to noop.",
+            "actions": [{"action": "noop", "args": {}}],
             "raw": raw,
             "parse_error": True,
         }
+
+    allowed = set(ACTION_SCHEMA["properties"]["actions"]["items"]["properties"]["action"]["enum"])
+    normalized = []
+    for item in actions:
+        if not isinstance(item, dict):
+            continue
+        action = item.get("action")
+        args = item.get("args", {})
+        if action not in allowed:
+            continue
+        if not isinstance(args, dict):
+            args = {}
+        normalized.append({"action": action, "args": args})
+
+    if not normalized:
+        return {
+            "plan": "Model returned no valid actions; defaulting to noop.",
+            "actions": [{"action": "noop", "args": {}}],
+            "raw": raw,
+            "parse_error": True,
+        }
+    return {"plan": plan, "actions": normalized, "raw": raw}
+
+
+def _logs_available_for_enforcement(state):
+    resources = _resource_by_good(state if isinstance(state, dict) else {})
+    logs = resources.get("log", {})
+    if not isinstance(logs, dict):
+        return None
+    if logs.get("all_stock") is not None:
+        return _as_int(logs.get("all_stock"), 0)
+    if logs.get("stored") is not None:
+        return _as_int(logs.get("stored"), 0)
+    return None
+
+
+def _action_spec(action):
+    args = action.get("args") if isinstance(action, dict) else {}
     if not isinstance(args, dict):
-        args = {}
-    return {"reasoning": reasoning, "action": action, "args": args, "raw": raw}
+        return None
+    return args.get("spec") or args.get("spec_id") or args.get("building") or args.get("building_type")
+
+
+def enforce_actions(actions, report, state, journal_path=None, run_id=None, step=None):
+    """Apply deterministic MVP rules to the model queue."""
+    enforced = []
+    working = list(actions or [])
+
+    if report.get("advance_time_recommended") and not any(a.get("action") == "set_speed" for a in working):
+        working.append({"action": "set_speed", "args": {"speed": 3}})
+        enforced.append({"rule": "append_set_speed", "reason": "planner_recommended_advance_time"})
+
+    costs = getattr(planner, "COST_LOGS", None)
+    logs_have = _logs_available_for_enforcement(state)
+    filtered = []
+    if isinstance(costs, dict) and logs_have is not None:
+        for action in working:
+            if action.get("action") == "place_building":
+                spec = _action_spec(action)
+                if spec in costs and _as_int(costs.get(spec), 0) > logs_have:
+                    enforced.append(
+                        {
+                            "rule": "drop_unaffordable_place_building",
+                            "spec": spec,
+                            "cost_logs": _as_int(costs.get(spec), 0),
+                            "logs_have": logs_have,
+                        }
+                    )
+                    continue
+            filtered.append(action)
+    else:
+        filtered = working
+
+    if len(filtered) > 8:
+        kept = filtered[:8]
+        if filtered[-1].get("action") == "set_speed" and not any(a.get("action") == "set_speed" for a in kept):
+            kept = filtered[:7] + [filtered[-1]]
+        enforced.append({"rule": "cap_actions", "from": len(filtered), "to": len(kept)})
+        filtered = kept
+
+    if not filtered:
+        filtered = [{"action": "noop", "args": {}}]
+        enforced.append({"rule": "empty_queue_to_noop"})
+
+    for item in enforced:
+        if journal_path:
+            journal_append(journal_path, {"run_id": run_id, "step": step, "event": "enforced", **item})
+    return filtered, enforced
 
 
 def journal_append(path, record):
@@ -914,6 +940,183 @@ def journal_append(path, record):
             f.write(json.dumps(record, default=str) + "\n")
     except Exception as e:
         log_stderr("journal write failed: %s" % e)
+
+
+def bridge_actions_from_model(actions):
+    mapped = []
+    local_results = []
+    for index, action in enumerate(actions or []):
+        name = action.get("action") if isinstance(action, dict) else None
+        args = action.get("args", {}) if isinstance(action, dict) else {}
+        if not isinstance(args, dict):
+            args = {}
+        if name == "noop":
+            local_results.append(
+                {
+                    "index": index,
+                    "action": name,
+                    "command": "noop",
+                    "ok": True,
+                    "result": {"ok": True, "noop": True, "command": "noop"},
+                }
+            )
+            continue
+        mapping = ACTION_TO_ACT.get(name)
+        if mapping is None:
+            local_results.append(
+                {
+                    "index": index,
+                    "action": name,
+                    "command": str(name or "unknown"),
+                    "ok": False,
+                    "result": {"ok": False, "error": "unknown_action", "command": name},
+                }
+            )
+            continue
+        command, arg_fn = mapping
+        mapped.append(
+            {
+                "index": index,
+                "action": name,
+                "command": command,
+                "args": arg_fn(args),
+            }
+        )
+    return mapped, local_results
+
+
+def _single_action_result(item, status, body):
+    result = body if isinstance(body, dict) else {"ok": False, "body": body}
+    if "command" not in result:
+        result = dict(result)
+        result["command"] = item["command"]
+    return {
+        "index": item["index"],
+        "action": item["action"],
+        "command": item["command"],
+        "http_status": status,
+        "ok": status == 200 and isinstance(result, dict) and result.get("ok") is True,
+        "result": result,
+    }
+
+
+def execute_action_queue(bridge, actions):
+    bridge_items, local_results = bridge_actions_from_model(actions)
+    if not bridge_items:
+        return {"http_status": 200, "body": {"ok": True, "noop": True}, "results": local_results}
+
+    payload_actions = [{"command": item["command"], "args": item["args"]} for item in bridge_items]
+    batch_status, batch_body = bridge.act(
+        "batch", {"actions": payload_actions, "stop_on_error": False}
+    )
+
+    batch_ok = (
+        batch_status == 200
+        and isinstance(batch_body, dict)
+        and isinstance(batch_body.get("results"), list)
+    )
+    if batch_ok:
+        results = list(local_results)
+        for item, result in zip(bridge_items, batch_body.get("results") or []):
+            body = result if isinstance(result, dict) else {"ok": False, "body": result}
+            if "command" not in body:
+                body = dict(body)
+                body["command"] = item["command"]
+            results.append(
+                {
+                    "index": item["index"],
+                    "action": item["action"],
+                    "command": item["command"],
+                    "http_status": batch_status,
+                    "ok": body.get("ok") is True,
+                    "result": body,
+                }
+            )
+        results.sort(key=lambda item: item["index"])
+        return {"http_status": batch_status, "body": batch_body, "results": results}
+
+    fallback_results = list(local_results)
+    for item in bridge_items:
+        status, body = bridge.act(item["command"], item["args"])
+        fallback_results.append(_single_action_result(item, status, body))
+    fallback_results.sort(key=lambda item: item["index"])
+    return {
+        "http_status": batch_status,
+        "body": batch_body,
+        "fallback": True,
+        "results": fallback_results,
+    }
+
+
+def compact_action_results(results):
+    lines = []
+    for item in results or []:
+        body = item.get("result") if isinstance(item, dict) else {}
+        if not isinstance(body, dict):
+            body = {}
+        command = body.get("command") or item.get("command") or item.get("action") or "?"
+        if item.get("ok") is True or body.get("ok") is True:
+            status = "ok"
+        else:
+            error = body.get("error") or body.get("reason") or "error"
+            status = "error:%s" % error
+        suggestion = body.get("suggestion")
+        if suggestion:
+            status += " suggestion=%s" % _short(suggestion, 180)
+        lines.append("%s -> %s" % (command, status))
+    return "Action results:\n" + ("\n".join(lines) if lines else "none")
+
+
+def _playbook_sort_key(lesson):
+    if not isinstance(lesson, dict):
+        return (0, "")
+    value = str(lesson.get("last_seen_run") or lesson.get("created_run") or lesson.get("id") or "")
+    match = re.search(r"(\d+)$", value)
+    return (int(match.group(1)) if match else 0, value)
+
+
+def compact_playbook_block(path=PLAYBOOK_PATH, limit=5):
+    if coach_mod is None:
+        return ""
+    try:
+        playbook = coach_mod.load_playbook(Path(path))
+    except Exception as e:
+        log_stderr("playbook load failed: %s" % e)
+        return ""
+    lessons = [item for item in playbook.get("lessons", []) if isinstance(item, dict)]
+    lessons.sort(key=_playbook_sort_key, reverse=True)
+    lessons = lessons[:limit]
+    if not lessons:
+        return ""
+    lines = ["PLAYBOOK lessons from prior runs:"]
+    for index, lesson in enumerate(lessons, 1):
+        action = str(lesson.get("action") or "").strip()
+        trigger = str(lesson.get("trigger") or "").strip()
+        outcome = str(lesson.get("outcome") or "").strip()
+        line = "%d. trigger=%s | action=%s" % (index, trigger[:140], action[:240])
+        if outcome:
+            line += " | outcome=%s" % outcome[:160]
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def run_learning_loop(journal_path, run_id):
+    if metrics_mod is None or coach_mod is None:
+        log_stderr("learning loop skipped: metrics or coach module unavailable")
+        return
+    try:
+        journal = metrics_mod.read_journal(Path(journal_path))
+        run_metrics = metrics_mod.compute_metrics(journal)
+        run_metrics["run_id"] = run_id
+        metrics_mod.append_metrics_csv(run_metrics, Path(METRICS_CSV_PATH))
+        proposed = coach_mod.analyze(journal, run_metrics)
+        coach_mod.update_playbook(Path(PLAYBOOK_PATH), proposed, run_id)
+        log_stderr(
+            "learning loop complete: score=%s lessons=%s"
+            % (run_metrics.get("score"), len(proposed))
+        )
+    except Exception as e:
+        log_stderr("learning loop failed: %s" % e)
 
 
 # ---------------------------------------------------------------------------
@@ -929,6 +1132,8 @@ def run(cfg, run_id, max_steps):
     os.makedirs(journal_dir, exist_ok=True)
     journal_path = os.path.join(journal_dir, "%s.jsonl" % run_id)
     log_stderr("journal: %s" % journal_path)
+    playbook_block = compact_playbook_block(PLAYBOOK_PATH)
+    system_prompt = SYSTEM_PROMPT + (("\n\n" + playbook_block) if playbook_block else "")
 
     # Preflight: bridge and ollama liveness (warn but continue — they may come up).
     pstatus, pdata = bridge.ping()
@@ -940,7 +1145,7 @@ def run(cfg, run_id, max_steps):
     journal_append(
         journal_path,
         {"run_id": run_id, "event": "run_start", "config": {k: cfg[k] for k in cfg},
-         "max_steps": max_steps, "ping": pdata},
+         "max_steps": max_steps, "ping": pdata, "playbook_loaded": bool(playbook_block)},
     )
 
     # Rolling chat history (after the system prompt). We keep it short.
@@ -974,18 +1179,19 @@ def run(cfg, run_id, max_steps):
                 continue
 
             state_block = compact_state(state)
-            next_spec = infer_next_building_type(state)
 
             mstatus, map_data = bridge.map()
-            if mstatus == 200:
-                map_info = compact_map_summary(map_data, state, next_spec)
-                map_block = map_info["text"]
-            else:
-                map_info = {"text": "MAP: <unavailable status=%s>" % mstatus, "candidates": []}
-                map_block = map_info["text"]
+            if mstatus != 200:
+                map_data = {}
                 log_stderr("step %d: /map unavailable (status=%s); continuing" % (step, mstatus))
 
-            kb_query = kb_query_for_state(state, next_spec)
+            buildings_detail = ((state.get("buildings") or {}).get("list") if isinstance(state, dict) else None)
+            report = planner.plan_report(state, map_data, buildings_detail)
+            goals = report.get("goals") or []
+            top_goal_id = goals[0].get("id") if goals and isinstance(goals[0], dict) else None
+            planner_block = report.get("text") or "PLANNER: <unavailable>"
+
+            kb_query = kb_query_for_state(state, top_goal_id)
             kb_block = compact_kb_block(kb_query, k=3)
 
             # --- 1b. Optional visual critique (every VISION_EVERY steps) ----
@@ -1007,17 +1213,15 @@ def run(cfg, run_id, max_steps):
                 "content": (
                     state_block
                     + "\n\n"
-                    + map_block
+                    + planner_block
                     + "\n\n"
                     + kb_block
                     + (("\n\n" + last_vision) if last_vision else "")
-                    + "\n\nNEXT_BUILDING_HINT=%s" % next_spec
-                    + "\nUse map candidates when placing. Connect placed buildings to "
-                    "the district center with Path. Choose the single most urgent "
-                    "action now. Return ONLY the JSON object matching the schema."
+                    + "\n\nChoose an ordered queue from the PLANNER goals/candidates. "
+                    "Return ONLY the JSON object matching the schema."
                 ),
             }
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-HISTORY_LIMIT:] + [user_msg]
+            messages = [{"role": "system", "content": system_prompt}] + history[-HISTORY_LIMIT:] + [user_msg]
 
             try:
                 assistant_msg = ollama.chat(messages)
@@ -1035,66 +1239,66 @@ def run(cfg, run_id, max_steps):
                 continue
 
             chosen = parse_action_message(assistant_msg)
+            actions, enforced = enforce_actions(
+                chosen.get("actions", []),
+                report,
+                state,
+                journal_path=journal_path,
+                run_id=run_id,
+                step=step,
+            )
 
-            # --- 3. Execute the chosen action -------------------------------
-            action = chosen["action"]
-            args = chosen["args"]
+            # --- 3. Execute the chosen action queue -------------------------
             if chosen.get("parse_error"):
                 log_stderr(
-                    "step %d: invalid JSON action; defaulting to noop. content=%s"
+                    "step %d: invalid JSON action queue; defaulting to noop. content=%s"
                     % (step, _short(chosen.get("raw", ""), 120))
                 )
 
-            if action == "noop":
-                act_status = 200
-                act_result = {"ok": True, "noop": True}
-            else:
-                mapping = ACTION_TO_ACT.get(action)
-                if mapping is None:
-                    # Should be unreachable after parse_action_message validation.
-                    log_stderr("step %d: unknown action '%s' — treating as malformed." % (step, action))
-                    act_status, act_result = 0, {"ok": False, "error": "unknown_action", "action": action}
-                else:
-                    command, arg_fn = mapping
-                    act_args = arg_fn(args)
-                    act_status, act_result = bridge.act(command, act_args)
+            exec_result = execute_action_queue(bridge, actions)
+            action_results = exec_result.get("results") or []
 
             # --- 4. Interpret the action result ----------------------------
-            ok = isinstance(act_result, dict) and act_result.get("ok") is True
-            err = None
-            if not ok and isinstance(act_result, dict):
-                err = act_result.get("error") or act_result.get("reason") or "unknown"
-                # A "not_implemented" command is expected for not-yet-live commands;
-                # not a hard failure — the model should pick something else next turn.
-
-            if act_status == 200 and (ok or err == "not_implemented"):
-                consecutive_errors = 0
-            elif act_status == 0 and (isinstance(act_result, dict) and act_result.get("error") == "unknown_action"):
-                # Malformed action from the model — count softly, re-prompt via history.
-                consecutive_errors += 1
-            elif not ok:
-                # Teaching error (invalid placement, etc.) — NOT a transport failure;
-                # this is normal feedback the model corrects from. Don't count it.
+            ok_count = sum(1 for item in action_results if item.get("ok") is True)
+            err_count = len(action_results) - ok_count
+            if action_results:
                 consecutive_errors = 0
             else:
                 consecutive_errors += 1
 
             # --- 5. Per-step stdout line -----------------------------------
-            status_word = "OK" if ok else ("ERR:%s" % err if err else "?")
+            status_word = "OK:%s ERR:%s" % (ok_count, err_count)
             print(
-                "step %02d/%d | %s(%s) -> %s | %s"
+                "step %02d/%d | actions=%d -> %s | %s"
                 % (
                     step,
                     max_steps,
-                    action,
-                    _short(args, 80),
+                    len(actions),
                     status_word,
-                    _short(chosen.get("reasoning", ""), 120),
+                    _short(chosen.get("plan", ""), 120),
                 ),
                 flush=True,
             )
 
             # --- 6. Journal the full step ----------------------------------
+            for result_item in action_results:
+                journal_append(
+                    journal_path,
+                    {
+                        "run_id": run_id,
+                        "step": step,
+                        "event": "action_result",
+                        "action": {
+                            "name": result_item.get("action"),
+                            "command": result_item.get("command"),
+                        },
+                        "result": {
+                            "http_status": result_item.get("http_status", exec_result.get("http_status")),
+                            "body": result_item.get("result"),
+                        },
+                    },
+                )
+
             journal_append(
                 journal_path,
                 {
@@ -1104,17 +1308,20 @@ def run(cfg, run_id, max_steps):
                     "state": state_summary_for_journal(state),
                     "map": {
                         "http_status": mstatus,
-                        "summary": map_block,
-                        "candidate_count": len(map_info.get("candidates", [])),
+                        "planner": planner_block,
                     },
                     "kb_query": kb_query,
                     "action": {
-                        "name": action,
-                        "args": args,
-                        "reasoning": chosen.get("reasoning", ""),
+                        "plan": chosen.get("plan", ""),
+                        "actions": actions,
+                        "enforced": enforced,
                         "raw": chosen.get("raw", ""),
                     },
-                    "result": {"http_status": act_status, "body": act_result},
+                    "result": {
+                        "http_status": exec_result.get("http_status"),
+                        "body": exec_result.get("body"),
+                        "fallback": exec_result.get("fallback", False),
+                    },
                 },
             )
 
@@ -1125,16 +1332,15 @@ def run(cfg, run_id, max_steps):
                 "role": "assistant",
                 "content": json.dumps(
                     {
-                        "reasoning": chosen.get("reasoning", ""),
-                        "action": action,
-                        "args": args,
+                        "plan": chosen.get("plan", ""),
+                        "actions": actions,
                     },
                     default=str,
                 ),
             })
             history.append({
                 "role": "user",
-                "content": "Action result: " + _short(act_result, 400),
+                "content": compact_action_results(action_results),
             })
             # Trim to the last HISTORY_LIMIT messages.
             history = history[-HISTORY_LIMIT:]
@@ -1157,6 +1363,7 @@ def run(cfg, run_id, max_steps):
             time.sleep(2)
 
     journal_append(journal_path, {"run_id": run_id, "event": "run_end"})
+    run_learning_loop(journal_path, run_id)
     log_stderr("run complete. journal: %s" % journal_path)
 
 
