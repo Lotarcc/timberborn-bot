@@ -63,11 +63,20 @@ namespace TimberBridge {
     }
 
     private void HandleClient(TcpClient client) {
+      client.NoDelay = true;
       client.ReceiveTimeout = 2000;
       client.SendTimeout = 2000;
       NetworkStream stream = client.GetStream();
 
-      string requestLine = ReadRequestLine(stream);
+      // Drain the whole request head (request line + headers up to the blank line)
+      // so closing doesn't RST the client — some HTTP clients report that as an error.
+      string requestLine = null;
+      string headerLine;
+      int guard = 0;
+      while (guard++ < 200 && (headerLine = ReadLine(stream)) != null) {
+        if (requestLine == null) requestLine = headerLine;
+        if (headerLine.Length == 0) break; // blank line ends the headers
+      }
       string path = ParsePath(requestLine);
 
       int status;
@@ -94,18 +103,20 @@ namespace TimberBridge {
       stream.Write(head, 0, head.Length);
       stream.Write(body, 0, body.Length);
       stream.Flush();
+      try { client.Client.Shutdown(SocketShutdown.Both); } catch { /* client already gone */ }
     }
 
-    // Read only the first line ("GET /ping HTTP/1.1"); the rest is ignored for /ping.
-    private static string ReadRequestLine(NetworkStream stream) {
+    // Read one CRLF-terminated line. Returns "" for a blank line (end of headers),
+    // null at end of stream with nothing buffered.
+    private static string ReadLine(NetworkStream stream) {
       var sb = new StringBuilder();
       int guard = 0;
       int b;
-      while (guard++ < 8192 && (b = stream.ReadByte()) != -1) {
-        if (b == '\n') break;
+      while (guard++ < 16384 && (b = stream.ReadByte()) != -1) {
+        if (b == '\n') return sb.ToString();
         if (b != '\r') sb.Append((char)b);
       }
-      return sb.ToString();
+      return sb.Length > 0 ? sb.ToString() : null;
     }
 
     private static string ParsePath(string requestLine) {

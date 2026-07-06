@@ -16,8 +16,8 @@ Goal: prove the whole chain end-to-end with the thinnest possible mod.
 - Stand up the in-process HTTP server (`ILoadableSingleton` + `IUpdatableSingleton` main-thread queue) returning `/ping`.
 - Open the SSH tunnel; confirm the Mac can reach it.
 - Reconfigure Ollama (`num_parallel=1`, flash attn, q8 KV); finish the benchmark matrix and lock the planner model.
-- **Exit:** `curl` through the tunnel hits `/ping` and gets `{ok:true, game_version:"1.0.13.1"}` from inside a running game; chosen planner benchmarked ≥15 tok/s on-GPU at 32k.
-- Risks: main-thread marshaling, tray-app/env restart, mod load failure. Mitigate by keeping the spike trivial.
+- **Exit (MET 2026-07-06):** ✅ `curl` through the SSH tunnel (Mac → Windows game) returns `{"ok":true,"bridge_version":"0.1.0","game_version":"1.0.13.1","in_game":true}`; 404s handled. Planner benchmarked (`qwen2.5:7b`, 59 tok/s on-GPU at 32k).
+- Learnings: server uses `TcpListener` (HttpListener needs URL-ACL). Drain the request + graceful `Shutdown` before close, else some clients see an RST. Mod is a plain DLL + manifest in the user's `Documents/Timberborn/Mods/` (auto-loaded).
 
 ### Phase 1 — Observation (read-only)
 Goal: the full colony situation readable from JSON alone.
@@ -73,7 +73,7 @@ Droughts survived · cycle reached · peak/final population · final well-being 
 | False learning from noise | promotes bad designs | require n≥3 samples + margin; keep superseded history |
 
 ## Current status (2026-07-06)
-- Feasibility + design done; docs written (`docs/`), KB being built (`docs/kb/`, 3 agents).
-- Game installed (`F:\SteamLibrary\...\Timberborn`), never launched once → needs a first manual launch to create `Documents/Timberborn`.
-- Confirmed most game services via reflection; inventory + districts remain GAP.
-- Local models pulling; Ollama reconfig + final benchmark pending. Next concrete step: **Phase 0 spike**.
+- **Phase 0 complete.** TimberBridge mod loads in Timberborn v1.0.13.1, serves `/ping` over the tunnel end-to-end. Docs + KB written; models pulled; Ollama reconfigured.
+- Compute: two-node split (Windows planner `qwen2.5:7b` + game; Mac aux models). Game measured at **~2.3 GB VRAM** in a loaded save (well under the 5–6 GB reservation) → a larger planner may be reconsidered later.
+- Confirmed most game services via reflection; inventory + districts remain GAP (Phase 1 decompile).
+- Next: **Phase 1 — Observation**: main-thread request marshalling (`IUpdatableSingleton`) + `/state`, `/map`, `/events`, `/blueprints`. Requires a game restart to load the rebuilt DLL.
