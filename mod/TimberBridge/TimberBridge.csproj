@@ -20,6 +20,7 @@
     <Reference Include="$(TimberbornManaged)\Timberborn.*.dll" Private="false" />
     <Reference Include="$(TimberbornManaged)\Bindito.*.dll" Private="false" />
     <Reference Include="$(TimberbornManaged)\UnityEngine.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)\Newtonsoft.Json.dll" Private="false" />
   </ItemGroup>
 
 </Project>

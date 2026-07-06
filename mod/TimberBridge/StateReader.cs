@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Timberborn.Buildings;
 using Timberborn.ConstructionSites;
 using Timberborn.EntitySystem;
@@ -8,14 +9,14 @@ using Timberborn.Goods;
 using Timberborn.Population;
 using Timberborn.ResourceCountingSystem;
 using Timberborn.TimeSystem;
-using UnityEngine;
 
 namespace TimberBridge {
 
   // Builds the digested /state snapshot. Every method here runs on the Unity
   // main thread (invoked through MainThreadDispatcher), so touching game
-  // services is safe. Phase 1: time + resources + population + buildings.
-  // (weather forecast, alerts, and building-paused state are next.)
+  // services is safe. Serialized with Newtonsoft (bundled with the game) —
+  // UnityEngine.JsonUtility silently drops mod-defined nested types.
+  // Phase 1: time + resources + population + buildings.
   public class StateReader {
 
     private readonly GameCycleService _cycle;
@@ -52,7 +53,7 @@ namespace TimberBridge {
         resources = ReadResources(),
         buildings = ReadBuildings()
       };
-      return JsonUtility.ToJson(dto);
+      return JsonConvert.SerializeObject(dto);
     }
 
     private PopulationDto ReadPopulation() {
@@ -69,7 +70,7 @@ namespace TimberBridge {
       };
     }
 
-    private GoodDto[] ReadResources() {
+    private List<GoodDto> ReadResources() {
       var list = new List<GoodDto>();
       foreach (string goodId in _goods.Goods) {
         ResourceCount c = _resources.GetGlobalResourceCount(goodId);
@@ -84,7 +85,7 @@ namespace TimberBridge {
           fill_rate = c.FillRate
         });
       }
-      return list.ToArray();
+      return list;
     }
 
     private BuildingsDto ReadBuildings() {
@@ -105,34 +106,27 @@ namespace TimberBridge {
         underConstruction++;
       }
 
-      var arr = new List<BuildingCountDto>();
-      foreach (KeyValuePair<string, int> kv in counts) {
-        arr.Add(new BuildingCountDto { spec = kv.Key, count = kv.Value });
-      }
-      return new BuildingsDto { counts = arr.ToArray(), under_construction = underConstruction };
+      return new BuildingsDto { counts = counts, under_construction = underConstruction };
     }
 
-    // --- DTOs (JsonUtility-serializable: public fields, no dictionaries) ---
+    // --- DTOs (public fields; serialized by Newtonsoft) ---
 
-    [Serializable]
-    public class StateDto {
+    private class StateDto {
       public bool ok;
       public TimeDto time;
       public PopulationDto population;
-      public GoodDto[] resources;
+      public List<GoodDto> resources;
       public BuildingsDto buildings;
     }
 
-    [Serializable]
-    public class TimeDto {
+    private class TimeDto {
       public int cycle;
       public int day;
       public float hour;
       public bool daytime;
     }
 
-    [Serializable]
-    public class PopulationDto {
+    private class PopulationDto {
       public int total;
       public int adults;
       public int kits;
@@ -143,8 +137,7 @@ namespace TimberBridge {
       public int homeless;
     }
 
-    [Serializable]
-    public class GoodDto {
+    private class GoodDto {
       public string good;
       public int stored;
       public int all_stock;
@@ -152,16 +145,9 @@ namespace TimberBridge {
       public float fill_rate;
     }
 
-    [Serializable]
-    public class BuildingsDto {
-      public BuildingCountDto[] counts;
+    private class BuildingsDto {
+      public Dictionary<string, int> counts;
       public int under_construction;
-    }
-
-    [Serializable]
-    public class BuildingCountDto {
-      public string spec;
-      public int count;
     }
 
   }
