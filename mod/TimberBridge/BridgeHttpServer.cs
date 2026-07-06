@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using Timberborn.SingletonSystem;
 using UnityEngine;
 
@@ -28,10 +29,12 @@ namespace TimberBridge {
 
     private readonly MainThreadDispatcher _dispatcher;
     private readonly StateReader _stateReader;
+    private readonly Actuator _actuator;
 
-    public BridgeHttpServer(MainThreadDispatcher dispatcher, StateReader stateReader) {
+    public BridgeHttpServer(MainThreadDispatcher dispatcher, StateReader stateReader, Actuator actuator) {
       _dispatcher = dispatcher;
       _stateReader = stateReader;
+      _actuator = actuator;
     }
 
     public void Load() {
@@ -89,11 +92,22 @@ namespace TimberBridge {
       // so closing doesn't RST the client — some HTTP clients report that as an error.
       string requestLine = null;
       string headerLine;
+      int contentLength = 0;
       int guard = 0;
       while (guard++ < 200 && (headerLine = ReadLine(stream)) != null) {
-        if (requestLine == null) requestLine = headerLine;
-        if (headerLine.Length == 0) break; // blank line ends the headers
+        if (requestLine == null) {
+          requestLine = headerLine;
+        } else if (headerLine.Length == 0) {
+          break; // blank line ends the headers
+        } else {
+          int ci = headerLine.IndexOf(':');
+          if (ci > 0 && headerLine.Substring(0, ci).Trim()
+                .Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) {
+            int.TryParse(headerLine.Substring(ci + 1).Trim(), out contentLength);
+          }
+        }
       }
+      string reqBody = ReadBody(stream, contentLength);
       string path = ParsePath(requestLine);
 
       int status;
@@ -124,6 +138,27 @@ namespace TimberBridge {
           json = "{\"ok\":false,\"error\":\"read_failed\"}";
           Debug.LogError("[TimberBridge] /state error: " + e);
         }
+      } else if (path == "/act") {
+        try {
+          JObject req = string.IsNullOrEmpty(reqBody) ? new JObject() : JObject.Parse(reqBody);
+          string command = (string)req["command"] ?? "";
+          JObject actArgs = req["args"] as JObject;
+          Task<string> read = _dispatcher.EnqueueRead(() => _actuator.Act(command, actArgs));
+          if (read.Wait(3000)) {
+            status = 200;
+            statusText = "OK";
+            json = read.Result;
+          } else {
+            status = 503;
+            statusText = "Service Unavailable";
+            json = "{\"ok\":false,\"error\":\"main_thread_timeout\"}";
+          }
+        } catch (Exception e) {
+          status = 400;
+          statusText = "Bad Request";
+          json = "{\"ok\":false,\"error\":\"bad_request\"}";
+          Debug.LogError("[TimberBridge] /act error: " + e);
+        }
       } else {
         status = 404;
         statusText = "Not Found";
@@ -153,6 +188,21 @@ namespace TimberBridge {
         if (b != '\r') sb.Append((char)b);
       }
       return sb.Length > 0 ? sb.ToString() : null;
+    }
+
+    private static string ReadBody(NetworkStream stream, int contentLength) {
+      if (contentLength <= 0) {
+        return "";
+      }
+      byte[] buf = new byte[contentLength];
+      int read = 0;
+      while (read < contentLength) {
+        int n;
+        try { n = stream.Read(buf, read, contentLength - read); } catch { break; }
+        if (n <= 0) break;
+        read += n;
+      }
+      return Encoding.UTF8.GetString(buf, 0, read);
     }
 
     private static string ParsePath(string requestLine) {

@@ -12,6 +12,7 @@ namespace TimberBridge {
     protected override void Configure() {
       Bind<MainThreadDispatcher>().AsSingleton();
       Bind<StateReader>().AsSingleton();
+      Bind<Actuator>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
 
