@@ -26,6 +26,8 @@ SuspensionBridge1x1..6x1 | Suspension Bridge 1–6 | Nx1x1, N=1..6 | 4l+4p per N
 ZiplineStation | Zipline Station | 2x3x4 | 20l+40p+20m | 0 | 700 | — | beaver fast travel ~2.5x speed; link stations via pylons
 ZiplinePylon | Zipline Pylon | 1x1x4 | 20p+10g+10m | 0 | 600 | — | line support; can stand in water
 ZiplineBeam | Zipline Beam | 1x1x1 | 20p+10g+10m | 0 | 600 | — | horizontal zipline connector
+Tunnel | Tunnel | 1x1x1 | 6p+1 explosive+1 extract | 0 | 2000 | — | bores walkway through terrain (v? present in 1.0.13)
+DirtExcavator | Dirt Excavator | 5x6x3 | 100g+100tp+50m | 4 | 2000 | 200 | digs dirt from 5x5 area, needs water access (v? present in 1.0.13)
 
 ## Water & hydro (details in buildings-water.md)
 spec | name | size | cost | wk | sci | power | notes
