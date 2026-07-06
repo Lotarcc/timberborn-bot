@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using Timberborn.Buildings;
+using Timberborn.ConstructionSites;
+using Timberborn.EntitySystem;
 using Timberborn.GameCycleSystem;
 using Timberborn.Goods;
 using Timberborn.Population;
@@ -11,8 +14,8 @@ namespace TimberBridge {
 
   // Builds the digested /state snapshot. Every method here runs on the Unity
   // main thread (invoked through MainThreadDispatcher), so touching game
-  // services is safe. Phase 1 in progress: time + resources + population
-  // confirmed; buildings / weather / alerts layered in next.
+  // services is safe. Phase 1: time + resources + population + buildings.
+  // (weather forecast, alerts, and building-paused state are next.)
   public class StateReader {
 
     private readonly GameCycleService _cycle;
@@ -20,17 +23,20 @@ namespace TimberBridge {
     private readonly ResourceCountingService _resources;
     private readonly IGoodService _goods;
     private readonly PopulationService _population;
+    private readonly EntityComponentRegistry _entities;
 
     public StateReader(GameCycleService cycle,
                        IDayNightCycle time,
                        ResourceCountingService resources,
                        IGoodService goods,
-                       PopulationService population) {
+                       PopulationService population,
+                       EntityComponentRegistry entities) {
       _cycle = cycle;
       _time = time;
       _resources = resources;
       _goods = goods;
       _population = population;
+      _entities = entities;
     }
 
     public string ReadStateJson() {
@@ -43,7 +49,8 @@ namespace TimberBridge {
           daytime = _time.IsDaytime
         },
         population = ReadPopulation(),
-        resources = ReadResources()
+        resources = ReadResources(),
+        buildings = ReadBuildings()
       };
       return JsonUtility.ToJson(dto);
     }
@@ -80,6 +87,31 @@ namespace TimberBridge {
       return list.ToArray();
     }
 
+    private BuildingsDto ReadBuildings() {
+      var counts = new Dictionary<string, int>();
+      foreach (Building b in _entities.GetEnabled<Building>()) {
+        string id;
+        try {
+          id = b.Spec.Blueprint.Name;
+        } catch {
+          continue; // skip a building whose spec/blueprint is unavailable
+        }
+        counts.TryGetValue(id, out int n);
+        counts[id] = n + 1;
+      }
+
+      int underConstruction = 0;
+      foreach (ConstructionSite _ in _entities.GetEnabled<ConstructionSite>()) {
+        underConstruction++;
+      }
+
+      var arr = new List<BuildingCountDto>();
+      foreach (KeyValuePair<string, int> kv in counts) {
+        arr.Add(new BuildingCountDto { spec = kv.Key, count = kv.Value });
+      }
+      return new BuildingsDto { counts = arr.ToArray(), under_construction = underConstruction };
+    }
+
     // --- DTOs (JsonUtility-serializable: public fields, no dictionaries) ---
 
     [Serializable]
@@ -88,6 +120,7 @@ namespace TimberBridge {
       public TimeDto time;
       public PopulationDto population;
       public GoodDto[] resources;
+      public BuildingsDto buildings;
     }
 
     [Serializable]
@@ -117,6 +150,18 @@ namespace TimberBridge {
       public int all_stock;
       public int capacity;
       public float fill_rate;
+    }
+
+    [Serializable]
+    public class BuildingsDto {
+      public BuildingCountDto[] counts;
+      public int under_construction;
+    }
+
+    [Serializable]
+    public class BuildingCountDto {
+      public string spec;
+      public int count;
     }
 
   }
