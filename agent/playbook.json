@@ -1,0 +1,50 @@
+{
+  "lessons": [
+    {
+      "action": "pause discretionary builds; place pumps and tanks until stored_water >= (D+2)*2.13*P before advancing",
+      "confidence": 0.539,
+      "created_run": "m4b-live",
+      "evidence": {
+        "losses": 2,
+        "runs": 2,
+        "wins": 0
+      },
+      "id": "L-0001",
+      "last_seen_run": "m4b-live",
+      "outcome": "prevents first-drought thirst spiral by making tank water the survival gate",
+      "situation": "cycle<=1, pop=13, tank reserve absent",
+      "trigger": "forecast drought OR water_stored == 0"
+    },
+    {
+      "action": "treat the bridge error as a hard constraint; retry with an implemented tool or defer that command until /act supports it",
+      "confidence": 0.469,
+      "created_run": "m4b-live",
+      "evidence": {
+        "losses": 2,
+        "runs": 2,
+        "wins": 0
+      },
+      "id": "L-0002",
+      "last_seen_run": "m4b-live",
+      "outcome": "keeps malformed or unsupported commands from wasting turns",
+      "situation": "3 failed action(s) in run m4b-live",
+      "trigger": "bridge teaching error == bad_args"
+    },
+    {
+      "action": "treat the bridge error as a hard constraint; retry with an implemented tool or defer that command until /act supports it",
+      "confidence": 0.469,
+      "created_run": "m4b-live",
+      "evidence": {
+        "losses": 2,
+        "runs": 2,
+        "wins": 0
+      },
+      "id": "L-0003",
+      "last_seen_run": "m4b-live",
+      "outcome": "keeps malformed or unsupported commands from wasting turns",
+      "situation": "3 failed action(s) in run m4b-live",
+      "trigger": "bridge teaching error == not_ok"
+    }
+  ],
+  "schema": "timberborn-bot-playbook-v1"
+}
