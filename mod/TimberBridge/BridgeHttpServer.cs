@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Timberborn.SingletonSystem;
 using UnityEngine;
 
@@ -23,6 +24,14 @@ namespace TimberBridge {
     private Thread _thread;
     private volatile bool _running;
     private string _gameVersion = "unknown";
+
+    private readonly MainThreadDispatcher _dispatcher;
+    private readonly StateReader _stateReader;
+
+    public BridgeHttpServer(MainThreadDispatcher dispatcher, StateReader stateReader) {
+      _dispatcher = dispatcher;
+      _stateReader = stateReader;
+    }
 
     public void Load() {
       _gameVersion = ReadGameVersion();
@@ -88,6 +97,25 @@ namespace TimberBridge {
         json = "{\"ok\":true,\"bridge_version\":\"" + BridgeVersion
              + "\",\"game_version\":\"" + Escape(_gameVersion)
              + "\",\"in_game\":true}";
+      } else if (path == "/state") {
+        try {
+          // Read game state on the main thread; block this listener thread until it completes.
+          Task<string> read = _dispatcher.EnqueueRead(() => _stateReader.ReadStateJson());
+          if (read.Wait(3000)) {
+            status = 200;
+            statusText = "OK";
+            json = read.Result;
+          } else {
+            status = 503;
+            statusText = "Service Unavailable";
+            json = "{\"ok\":false,\"error\":\"main_thread_timeout\"}";
+          }
+        } catch (Exception e) {
+          status = 500;
+          statusText = "Internal Server Error";
+          json = "{\"ok\":false,\"error\":\"read_failed\"}";
+          Debug.LogError("[TimberBridge] /state error: " + e);
+        }
       } else {
         status = 404;
         statusText = "Not Found";

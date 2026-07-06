@@ -10,6 +10,8 @@ namespace TimberBridge {
   public class BridgeConfigurator : Configurator {
 
     protected override void Configure() {
+      Bind<MainThreadDispatcher>().AsSingleton();
+      Bind<StateReader>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
 

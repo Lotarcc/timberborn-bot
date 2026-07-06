@@ -14,23 +14,12 @@
     <TimberbornManaged Condition="'$(TimberbornManaged)' == ''">F:\SteamLibrary\steamapps\common\Timberborn\Timberborn_Data\Managed</TimberbornManaged>
   </PropertyGroup>
 
+  <!-- Reference the whole game API surface via globs so new endpoints need no csproj edits.
+       System/mscorlib come from the netstandard2.1 SDK, so only game + Unity + Bindito are globbed. -->
   <ItemGroup>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>$(TimberbornManaged)\UnityEngine.CoreModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Bindito.Core">
-      <HintPath>$(TimberbornManaged)\Bindito.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Timberborn.SingletonSystem">
-      <HintPath>$(TimberbornManaged)\Timberborn.SingletonSystem.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Timberborn.ModManagerScene">
-      <HintPath>$(TimberbornManaged)\Timberborn.ModManagerScene.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <Reference Include="$(TimberbornManaged)\Timberborn.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)\Bindito.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)\UnityEngine.*.dll" Private="false" />
   </ItemGroup>
 
 </Project>
