@@ -77,13 +77,24 @@ The read path: inject `EntityComponentRegistry`, enumerate `GetEnabled()`, filte
 
 `BlockValidator.BlocksValid(spec, placement)` is the **teaching-error engine**: validate before `CreateFinished`, and on failure scan neighboring `Placement`s for the nearest valid tile to return as a suggestion.
 
-## Goods, inventory, stockpiles — GAP
-- `Timberborn.GameGoods` is data-only (no public top-level services via reflection).
-- `Timberborn.InventorySystem` exposed no public top-level types; the `Inventory` component likely lives in `Timberborn.Inventories`/`Timberborn.Goods`. **Confirm on decompile** — this is how `/state` reads per-building and global stock (water/food/logs/planks days-remaining).
-- Stockpile services: `Timberborn.GameStockpiles`, `Timberborn.Stockpiles`, `Timberborn.StockpilePrioritySystem`.
+## Entity enumeration — CONFIRMED (Phase 1)
+`EntityComponentRegistry` (Timberborn.EntitySystem) DOES expose generics (reflection helper didn't print them): `GetEnabled<T>() : IEnumerable<T>` (live/enabled) and `GetAll<T>() : IEnumerable<T>`. This is the read backbone — inject the registry, `GetEnabled<TComponent>()`. `BaseComponent.GetComponentFast<T>()` fetches a sibling component (verify exact name on decompile). `LabeledEntity.DisplayName` / `LabeledEntitySpec.DisplayNameLocKey` (+ `ILoc.T(key)`) give display names.
 
-## Districts — GAP
-- `Timberborn.GameDistricts` exposed no public top-level types via reflection. District center + population aggregation live here or in a sibling assembly. **Confirm on decompile** (population totals, worker distribution feed `/state`).
+## Resources / inventory — CONFIRMED (Phase 1)
+- `ResourceCountingService` (Timberborn.ResourceCountingSystem, a singleton): `GetGlobalResourceCount(string goodId) : ResourceCount`, `GetDistrictResourceCounter(DistrictCenter) : DistrictResourceCounter`.
+- `ResourceCount` (struct): `AvailableStock`, `AllStock`, `StockpiledStock`, `InputOutputCapacity`, `FillRate` (all int except FillRate float).
+- `IGoodService` (Timberborn.Goods): `Goods` enumerates good id strings ("Water","Log","Plank"…) — used to key `GetGlobalResourceCount`. (Note: `Goods` yields **strings**, not GoodSpec.)
+- Per-building fallback: `Inventory` (internal, Timberborn.InventorySystem): `.Stock : ReadOnlyList<GoodAmount>`, `.Capacity`, `.AmountInStock(id)`.
+
+## Population / districts / labor — CONFIRMED (Phase 1)
+- `PopulationService` (Timberborn.Population): `GlobalPopulationData : PopulationData`. `PopulationData`: `TotalPopulation`, `NumberOfAdults`, `NumberOfChildren` (kits), `NumberOfBots`, `BeaverWorkplaceData : WorkplaceData{FreeWorkslots, Unemployed, …}`, `BedData{FreeBeds, Homeless, …}`.
+- `DistrictCenterRegistry` (Timberborn.GameDistricts): `AllDistrictCenters`/`FinishedDistrictCenters : ReadOnlyList<DistrictCenter>`. `DistrictCenter`: `.DistrictName`, `.DistrictPopulation.NumberOf{Adults,Children,Bots}`, `.DistrictBuildingRegistry.GetEnabledBuildings()`.
+- Labor: `GlobalEmploymentStatisticsProvider.GetEmploymentStatistics(string workerType) : EmploymentStatistics{EmployedWorkers, Vacancies, WorkerType}`. Per-building assigned-vs-desired is INTERNAL (`Workplace`/`Worker` not public) — aggregate `WorkplaceData.FreeWorkslots` / `EmploymentStatistics.Vacancies` are the public signals.
+
+## Buildings — CONFIRMED (Phase 1)
+- Enumerate: `EntityComponentRegistry.GetEnabled<Building>()` (Timberborn.Buildings). Spec id: `Building.Spec.Blueprint.Name` ("Lumberjack" etc.).
+- Finished vs building: `BlockObject.IsFinished`/`.IsUnfinished`; unfinished ones carry a `ConstructionSite` (Timberborn.ConstructionSites) with `.BuildTimeProgress`, `.MaterialProgress`, `.IsOn` (false = halted). Count under-construction via `GetEnabled<ConstructionSite>()`.
+- Paused (finished buildings): `PausableBuilding.Paused` is the likely API but the type was dropped by ReflectionOnly — **still GAP, needs ILSpy**. `GoodConsumingToggle.Paused` (Timberborn.GoodConsumingBuildingSystem) is a confirmed proxy for good-consumers.
 
 ## Save / load — `Timberborn.SaveSystem` + repository assemblies
 - `SaveWriter.WriteToSaveStream(Stream, bool)`, `SaveReader.ReadFromSaveStream(...)` (low-level streams).
