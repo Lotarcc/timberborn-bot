@@ -37,6 +37,15 @@ except Exception:  # pragma: no cover - import path depends on invocation style
     except Exception:  # pragma: no cover - agent can still run without KB
         kb_lookup = None
 
+# Optional visual layer (screenshot -> VLM critique). Degrades to no-op if absent.
+try:
+    from vision import look as vision_look
+except Exception:  # pragma: no cover
+    try:
+        from agent.vision import look as vision_look
+    except Exception:  # pragma: no cover
+        vision_look = None
+
 # ---------------------------------------------------------------------------
 # HTTP shim: prefer requests, fall back to urllib so the script has zero hard deps.
 # Both paths expose one helper: http_json(method, url, body, timeout) -> (status, dict).
@@ -98,6 +107,10 @@ DEFAULTS = {
     "OLLAMA_URL": os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
     "MODEL": os.environ.get("MODEL", "qwen2.5:14b"),
     "MAX_STEPS": int(os.environ.get("MAX_STEPS", "40")),
+    # Visual layer: a VLM critiques a screenshot every N steps (0 = disabled).
+    # Kept infrequent because swapping the text<->vision model on the GPU is costly.
+    "VISION_MODEL": os.environ.get("VISION_MODEL", "qwen2.5vl:7b"),
+    "VISION_EVERY": int(os.environ.get("VISION_EVERY", "5")),
 }
 
 # Bounded network timeouts (connect, read) seconds.
@@ -916,6 +929,11 @@ def run(cfg, run_id, max_steps):
     # Rolling chat history (after the system prompt). We keep it short.
     history = []
     consecutive_errors = 0
+    # Most recent screenshot critique; refreshed every VISION_EVERY steps and
+    # reused on the steps in between (a VLM call is slow + swaps the GPU model).
+    last_vision = ""
+    vision_every = _as_int(cfg.get("VISION_EVERY"), 0)
+    vision_model = cfg.get("VISION_MODEL")
 
     for step in range(1, max_steps + 1):
         try:
@@ -953,6 +971,19 @@ def run(cfg, run_id, max_steps):
             kb_query = kb_query_for_state(state, next_spec)
             kb_block = compact_kb_block(kb_query, k=3)
 
+            # --- 1b. Optional visual critique (every VISION_EVERY steps) ----
+            if vision_every > 0 and vision_look is not None and ((step - 1) % vision_every == 0):
+                try:
+                    v = vision_look(
+                        cfg["BRIDGE_URL"], cfg["OLLAMA_URL"], vision_model,
+                        width=768, state_hint=state_block,
+                    )
+                    if v:
+                        last_vision = v
+                        log_stderr("step %d: vision refreshed (%d chars)" % (step, len(v)))
+                except Exception as e:
+                    log_stderr("step %d: vision failed: %s" % (step, e))
+
             # --- 2. Compose user message & call the LLM --------------------
             user_msg = {
                 "role": "user",
@@ -962,6 +993,7 @@ def run(cfg, run_id, max_steps):
                     + map_block
                     + "\n\n"
                     + kb_block
+                    + (("\n\n" + last_vision) if last_vision else "")
                     + "\n\nNEXT_BUILDING_HINT=%s" % next_spec
                     + "\nUse map candidates when placing. Connect placed buildings to "
                     "the district center with Path. Choose the single most urgent "
@@ -1117,6 +1149,11 @@ def main(argv=None):
     parser.add_argument("--ollama-url", default=DEFAULTS["OLLAMA_URL"])
     parser.add_argument("--model", default=DEFAULTS["MODEL"])
     parser.add_argument("--max-steps", type=int, default=DEFAULTS["MAX_STEPS"])
+    parser.add_argument("--vision-model", default=DEFAULTS["VISION_MODEL"])
+    parser.add_argument(
+        "--vision-every", type=int, default=DEFAULTS["VISION_EVERY"],
+        help="Run a VLM screenshot critique every N steps (0 disables the visual layer).",
+    )
     parser.add_argument(
         "--run-id",
         default=os.environ.get("RUN_ID", "run"),
@@ -1130,6 +1167,8 @@ def main(argv=None):
         "OLLAMA_URL": args.ollama_url,
         "MODEL": args.model,
         "MAX_STEPS": args.max_steps,
+        "VISION_MODEL": args.vision_model,
+        "VISION_EVERY": args.vision_every,
     }
     log_stderr("config: %s run_id=%s" % (cfg, args.run_id))
     run(cfg, args.run_id, args.max_steps)
