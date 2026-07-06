@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;      // List / HashSet
 using Timberborn.BlockSystem;          // BlockObject                    (CONFIRMED)
 using Timberborn.Buildings;            // DistrictBuilding               (CONFIRMED)
 using Timberborn.Coordinates;          // CoordinateSystem (static)      (CONFIRMED)
@@ -145,6 +146,88 @@ namespace TimberBridge {
         }
       }
       return grid;
+    }
+
+    // Column variant of IsTileOnDistrictRoad: when the caller only has an (x,y)
+    // column (a /map scan gives z=0), probe up the height column and report whether
+    // ANY height sits on the tight district-road network. Mirrors IsTileReachable's
+    // z==0 probe but against the ROAD network (not the wider road-spill). A tile with
+    // z>0 is tested exactly. Guarded so one bad cell never throws.
+    public bool IsColumnOnDistrictRoad(Vector3Int tile) {
+      try {
+        if (tile.z > 0) {
+          return IsTileOnDistrictRoad(tile);
+        }
+        for (int z = 0; z < VerticalProbeCeiling; z++) {
+          if (IsTileOnDistrictRoad(new Vector3Int(tile.x, tile.y, z))) return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+
+    // Row-major ON-ROAD grid for /map: index = row*width + col; tile x = originX + col,
+    // tile y = originZ + row. 1 = tile is ON the tight district-road network (DC road or
+    // a placed Path connected to it), 0 = not. This is the network a FINISHED building's
+    // ACCESS tile must touch to be staffed — distinct from ReachabilityGrid's builder
+    // road-spill radius. Per-tile calls are guarded, so one bad cell defaults to 0.
+    public int[] OnRoadGrid(int originX, int originZ, int width, int height) {
+      var grid = new int[width * height];
+      for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+          var tile = new Vector3Int(originX + col, originZ + row, 0);
+          grid[row * width + col] = IsColumnOnDistrictRoad(tile) ? 1 : 0;
+        }
+      }
+      return grid;
+    }
+
+    // The GRID tile(s) the game uses as a building's ACCESS point — the ground-truth
+    // that must sit ON the district road for DistrictBuilding.InstantDistrict to become
+    // non-null (staffed/reachable). CONFIRMED via decompile:
+    //   DistrictBuilding.ShouldBeAssignedToInstantDistrict ->
+    //   DistrictCenter.AccessibleIsOnInstantDistrictRoad(Accessible) ->
+    //   IDistrictService.IsOnInstantDistrictRoad(District, access) ->
+    //   InstantDistrictMap.RoadNodeIsOccupiedByDistrict(district, WorldToId(access)).
+    // The access world-positions come from BuildingAccessible.Accessible.Accesses,
+    // populated (when finished) from BuildingAccessible.CalculateAccess() =
+    //   GridToWorldCentered(PositionedEntrance.Coordinates)   (non-ForceOneFinalAccess), or
+    //   GridToWorld(TransformCoordinates(WorldToGrid(LocalAccess))) (ForceOneFinalAccess).
+    // We prefer the live Accessible.Accesses (exact, includes both accesses when the
+    // building forces a final access); we fall back to CalculateAccess() so a building
+    // that isn't finished yet (accesses not set) still yields its access tile. Each
+    // world-pos floors to a grid tile via WorldToGridInt — exactly what WorldToId does.
+    // Returns null when the object has no BuildingAccessible (paths/walkables/DC),
+    // matching StateReader's "access:null" contract.
+    public List<Vector3Int> AccessTiles(BlockObject block) {
+      try {
+        if (block == null) return null;
+        var ba = block.GetComponent<BuildingAccessible>();
+        if (ba == null) return null;
+        var tiles = new List<Vector3Int>();
+        var seen = new HashSet<Vector3Int>();
+
+        void AddWorld(Vector3 world) {
+          Vector3Int t = CoordinateSystem.WorldToGridInt(world);
+          if (seen.Add(t)) tiles.Add(t);
+        }
+
+        // Live accesses (set on the Accessible once the building enters finished state).
+        var accessible = ba.Accessible;
+        if (accessible != null) {
+          var accesses = accessible.Accesses;
+          for (int i = 0; i < accesses.Count; i++) AddWorld(accesses[i]);
+        }
+        // Fallback / always include the computed access so a not-yet-finished building
+        // (empty Accesses) still reports its access tile.
+        if (tiles.Count == 0) {
+          AddWorld(ba.CalculateAccess());
+        }
+        return tiles.Count > 0 ? tiles : null;
+      } catch {
+        return null;
+      }
     }
 
   }

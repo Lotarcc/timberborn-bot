@@ -155,8 +155,19 @@ namespace TimberBridge {
     // main thread (Act does). Wrapped end-to-end in try/catch: a paving failure must
     // NEVER fail the building placement or throw out of Act.
     //
+    // ROOT CAUSE THIS FIXES (CONFIRMED via decompile): the game connects a building
+    // through its ACCESS point, not by mere adjacency. DistrictBuilding.InstantDistrict
+    // becomes non-null iff DistrictCenter.AccessibleIsOnInstantDistrictRoad ->
+    // IDistrictService.IsOnInstantDistrictRoad(District, access) is true, where `access`
+    // is BuildingAccessible.Accessible's single access world-pos (from CalculateAccess()
+    // = GridToWorldCentered(PositionedEntrance.Coordinates)). WorldToId floors that to
+    // ONE grid tile. So THAT tile — the access tile — must itself be a road node. For a
+    // LumberjackFlag the access tile is the flag's own tile: paving the ring around the
+    // footprint (never the access tile) leaves it unreachable forever. We therefore route
+    // to the access tile and guarantee the access tile ends up ON the road.
+    //
     // Returns an anonymous object folded into place_building's JSON under "auto_connect":
-    //   { connected:bool, paths_laid:int, path_tiles:[{x,y,z}], reason?:string }
+    //   { connected:bool, paths_laid:int, path_tiles:[{x,y,z}], access_tiles?:[..], reason?:string }
     private object AutoConnect(Vector3Int buildingCoord, BlockObjectSpec buildingSpec) {
       try {
         BlockObjectSpec pathSpec = FindSpec("Path");
@@ -164,17 +175,31 @@ namespace TimberBridge {
           return new { connected = false, paths_laid = 0, reason = "no_path_spec" };
         }
 
-        // (a) Candidate start tiles: the orthogonal ring around the building footprint,
-        // at the building's z. If ANY is already on the district road, we're connected.
-        var startTiles = FootprintAdjacentTiles(buildingCoord, buildingSpec);
+        // Resolve the game's actual access tile(s) for the just-placed building. We need
+        // the live BlockObject to read BuildingAccessible; find it at the placed coord.
+        List<Vector3Int> accessTiles = ResolveAccessTiles(buildingCoord);
+
+        // Route-start tiles: the access tile(s) if we resolved them (the tiles that must
+        // land on the road — the correct target), else fall back to the old footprint
+        // ring (best-effort for buildings without a BuildingAccessible).
+        bool haveAccess = accessTiles != null && accessTiles.Count > 0;
+        List<Vector3Int> startTiles = haveAccess
+            ? accessTiles
+            : FootprintAdjacentTiles(buildingCoord, buildingSpec);
+
+        // Already connected? For the access-tile path, connected means an access tile is
+        // ITSELF on the road. For the footprint fallback, adjacency to a road tile counts
+        // (the historical behavior — a footprint-adjacent road already connects it).
         foreach (Vector3Int t in startTiles) {
           if (_reachability.IsTileOnDistrictRoad(t)) {
-            return new { connected = true, paths_laid = 0, path_tiles = new object[0] };
+            return new { connected = true, paths_laid = 0, path_tiles = new object[0],
+                         access_tiles = CoordList(accessTiles) };
           }
         }
 
-        // (b) BFS outward from the start tiles (4-neighbour, same z) for the nearest
-        // tile already on the district road. Track parents to rebuild the route.
+        // (b) BFS outward from the start tiles (4-neighbour, same z) for the nearest tile
+        // already on the district road. The start tiles are seeded into `parent` mapped
+        // to themselves so the rebuilt route always includes the access tile itself.
         var parent = new Dictionary<Vector3Int, Vector3Int>();
         var visited = new HashSet<Vector3Int>();
         var queue = new Queue<Vector3Int>();
@@ -182,7 +207,7 @@ namespace TimberBridge {
         bool foundRoad = false;
 
         foreach (Vector3Int t in startTiles) {
-          if (visited.Add(t)) queue.Enqueue(t);
+          if (visited.Add(t)) { parent[t] = t; queue.Enqueue(t); }
         }
 
         int expanded = 0;
@@ -210,19 +235,23 @@ namespace TimberBridge {
         if (!foundRoad) {
           // No land route to any district road within the cap (e.g. across a lake).
           // Do NOT fail the building — just report so the agent knows to build a bridge/dam.
-          return new { connected = false, paths_laid = 0, reason = "no_land_route" };
+          return new { connected = false, paths_laid = 0, reason = "no_land_route",
+                       access_tiles = CoordList(accessTiles) };
         }
 
-        // (c) Rebuild the route road<-...<-start, then lay Path on every tile from the
-        // building side UP TO (but not including) the road tile.
+        // (c) Rebuild the route road<-...<-accessTile. The start tile maps to itself in
+        // `parent`, so the loop terminates there and the route INCLUDES the access tile —
+        // which is exactly the tile the game tests against the road. Then lay Path on every
+        // route tile that is not already road (access tile included when it isn't road yet).
         var route = new List<Vector3Int>();
         Vector3Int walk = roadTile;
-        while (parent.TryGetValue(walk, out Vector3Int prev)) {
-          route.Add(walk);   // walk is a non-road tile here (roadTile has no parent unless it was a start tile)
+        while (true) {
+          route.Add(walk);
+          Vector3Int prev;
+          if (!parent.TryGetValue(walk, out prev) || prev.Equals(walk)) break;
           walk = prev;
         }
-        route.Add(walk); // the start tile
-        // route is road-adjacent .. start; drop the road tile itself if it slipped in.
+        // route is road .. accessTile; drop tiles already on the road (incl. the road end).
         route.RemoveAll(tile => _reachability.IsTileOnDistrictRoad(tile));
 
         var laid = new List<object>();
@@ -234,11 +263,33 @@ namespace TimberBridge {
           laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
         }
 
-        return new { connected = true, paths_laid = laid.Count, path_tiles = laid };
+        return new { connected = true, paths_laid = laid.Count, path_tiles = laid,
+                     access_tiles = CoordList(accessTiles) };
       } catch (Exception e) {
         Debug.LogError("[TimberBridge] auto_connect failed: " + e);
         return new { connected = false, paths_laid = 0, reason = "exception" };
       }
+    }
+
+    // Find the just-placed building's BlockObject at `coord` and read its game access
+    // tile(s) via ReachabilityReader.AccessTiles (BuildingAccessible/Accessible). Returns
+    // null when we can't resolve a BuildingAccessible (path/walkable or an odd spec) so
+    // AutoConnect falls back to the footprint ring. Guarded — never throws.
+    private List<Vector3Int> ResolveAccessTiles(Vector3Int coord) {
+      try {
+        BlockObject obj = _blocks.AnyObjectAt(coord) ? _blocks.GetBottomObjectAt(coord) : null;
+        if (obj == null) return null;
+        return _reachability.AccessTiles(obj);
+      } catch {
+        return null;
+      }
+    }
+
+    private static object CoordList(List<Vector3Int> tiles) {
+      if (tiles == null || tiles.Count == 0) return null;
+      var list = new List<object>();
+      foreach (Vector3Int t in tiles) list.Add(new { x = t.x, y = t.y, z = t.z });
+      return list;
     }
 
     // Orthogonal ring of tiles around a building's footprint at the building's z. The

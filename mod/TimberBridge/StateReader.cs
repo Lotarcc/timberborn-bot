@@ -273,7 +273,12 @@ namespace TimberBridge {
         Vector3Int c = block.Coordinates;
         var dto = new BuildingDetailDto {
           spec = specId, x = c.x, y = c.y, z = c.z,
-          progress = -1f, workers = -1, max_workers = -1
+          progress = -1f, workers = -1, max_workers = -1,
+          // Ground-truth access tile(s): the coordinate(s) the game requires ON the
+          // district road for this building to be staffed/reachable (from
+          // BuildingAccessible/Accessible). null for buildings without a
+          // BuildingAccessible (they connect by footprint, not an access point).
+          access = ReadAccessTiles(block)
         };
 
         bool finished = block.IsFinished;
@@ -309,6 +314,24 @@ namespace TimberBridge {
         return dto;
       } catch (Exception e) {
         Debug.LogError("[TimberBridge] building detail failed for " + specId + ": " + e);
+        return null;
+      }
+    }
+
+    // The access tile(s) the game connects this building through — the coordinate(s)
+    // that must sit ON the district road for it to be reachable (see ReachabilityReader
+    // .AccessTiles for the confirmed API chain). Returns null for buildings without a
+    // BuildingAccessible. Guarded so an access read never takes down the snapshot.
+    private List<CoordDto> ReadAccessTiles(BlockObject block) {
+      try {
+        var tiles = _reachability.AccessTiles(block);
+        if (tiles == null || tiles.Count == 0) return null;
+        var list = new List<CoordDto>();
+        foreach (Vector3Int t in tiles) {
+          list.Add(new CoordDto { x = t.x, y = t.y, z = t.z });
+        }
+        return list;
+      } catch {
         return null;
       }
     }
@@ -419,6 +442,7 @@ namespace TimberBridge {
       public int workers;      // -1 when not a workplace
       public int max_workers;
       public bool reachable;   // game-truth: false => unconnected/unreachable
+      public List<CoordDto> access; // access tile(s) the game requires on-road; null if none
     }
 
   }

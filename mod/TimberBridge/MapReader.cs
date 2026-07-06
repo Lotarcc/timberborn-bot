@@ -155,6 +155,21 @@ namespace TimberBridge
             }
             reach.Append(']');
 
+            // Tight district-ROAD membership per tile (1=on the DC road network or a
+            // placed Path connected to it, 0=not). Distinct from "reachable" above, which
+            // is the wider builder road-spill radius: a building's ACCESS tile must land
+            // on THIS grid (not merely be adjacent to it) to be staffed. Same window and
+            // row-major indexing as the other arrays.
+            int[] roadGrid = _reachability.OnRoadGrid(x0, y0, w, h);
+            var onRoad = new StringBuilder();
+            onRoad.Append('[');
+            for (int i = 0; i < roadGrid.Length; i++)
+            {
+                if (i > 0) onRoad.Append(',');
+                onRoad.Append(roadGrid[i]);
+            }
+            onRoad.Append(']');
+
             var sb = new StringBuilder();
             sb.Append('{');
             sb.Append("\"origin\":{\"x\":").Append(x0).Append(",\"z\":").Append(y0).Append('}');
@@ -169,6 +184,7 @@ namespace TimberBridge
             sb.Append(",\"moist\":").Append(moist);
             sb.Append(",\"occupied\":").Append(occupied);
             sb.Append(",\"reachable\":").Append(reach);
+            sb.Append(",\"on_road\":").Append(onRoad);
             sb.Append('}');
             return sb.ToString();
         }
