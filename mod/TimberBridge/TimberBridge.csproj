@@ -10,17 +10,18 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <!-- Path to the game's Managed folder; override on the CLI if the library lives elsewhere. -->
-    <TimberbornManaged Condition="'$(TimberbornManaged)' == ''">F:\SteamLibrary\steamapps\common\Timberborn\Timberborn_Data\Managed</TimberbornManaged>
+    <!-- Path to the game's Managed folder; override with -p:TimberbornManaged=... per host.
+         Windows default below; on macOS pass the app-bundle path. Forward slashes work on both. -->
+    <TimberbornManaged Condition="'$(TimberbornManaged)' == ''">F:/SteamLibrary/steamapps/common/Timberborn/Timberborn_Data/Managed</TimberbornManaged>
   </PropertyGroup>
 
   <!-- Reference the whole game API surface via globs so new endpoints need no csproj edits.
        System/mscorlib come from the netstandard2.1 SDK, so only game + Unity + Bindito are globbed. -->
   <ItemGroup>
-    <Reference Include="$(TimberbornManaged)\Timberborn.*.dll" Private="false" />
-    <Reference Include="$(TimberbornManaged)\Bindito.*.dll" Private="false" />
-    <Reference Include="$(TimberbornManaged)\UnityEngine.*.dll" Private="false" />
-    <Reference Include="$(TimberbornManaged)\Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)/Timberborn.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)/Bindito.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)/UnityEngine.*.dll" Private="false" />
+    <Reference Include="$(TimberbornManaged)/Newtonsoft.Json.dll" Private="false" />
   </ItemGroup>
 
 </Project>

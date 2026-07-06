@@ -74,8 +74,11 @@ namespace TimberBridge {
       var list = new List<GoodDto>();
       foreach (string goodId in _goods.Goods) {
         ResourceCount c = _resources.GetGlobalResourceCount(goodId);
-        if (c.AllStock == 0 && c.InputOutputCapacity == 0) {
-          continue; // good not present in the settlement
+        // Show a good if it's present, has storage, OR is a core survival good
+        // (water/food must appear even at 0 — that's the critical signal).
+        bool present = c.AllStock != 0 || c.InputOutputCapacity != 0;
+        if (!present && !IsCoreGood(goodId)) {
+          continue;
         }
         list.Add(new GoodDto {
           good = goodId,
@@ -86,6 +89,12 @@ namespace TimberBridge {
         });
       }
       return list;
+    }
+
+    // Goods that must appear in /state even at zero stock/capacity (survival-critical).
+    // Water can be 0 with no tank yet, which is exactly when the agent must see it.
+    private static bool IsCoreGood(string goodId) {
+      return goodId == "Water";
     }
 
     private BuildingsDto ReadBuildings() {
