@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Timberborn.BlockSystem;
+using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
 using Timberborn.ConstructionSites;
 using Timberborn.Coordinates;
@@ -10,6 +11,7 @@ using Timberborn.EntitySystem;
 using Timberborn.GameDistricts;
 using Timberborn.GameSaveRepositorySystem;
 using Timberborn.GameSaveRuntimeSystem;
+using Timberborn.PrioritySystem;
 using Timberborn.TemplateSystem;
 using Timberborn.TimeSystem;
 using UnityEngine;
@@ -71,6 +73,9 @@ namespace TimberBridge {
                                  GetCoord(args, "y"), GetCoord(args, "z"), GetStr(args, "orientation"),
                                  GetBool(args, "instant", false));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
+          case "set_priority":
+            return SetPriority(GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
+                               GetStr(args, "priority"));
           case "save": return Save(GetStr(args, "name"));
           case "batch": return Batch(args);
           default: return Err("not_implemented", command);
@@ -129,6 +134,36 @@ namespace TimberBridge {
       if (obj == null || !obj.CanDelete()) return Err("not_deletable", "(" + x + "," + y + "," + z + ")");
       _entities.Delete(obj);
       return Ok(new { command = "demolish", x, y, z });
+    }
+
+    // Set builder priority on a construction site. BuilderPrioritizable is only
+    // Enabled while the building is unfinished — on a finished building this
+    // correctly reports not_a_site.
+    private string SetPriority(int x, int y, int z, string priorityStr) {
+      var coord = new Vector3Int(x, y, z);
+      if (!_blocks.AnyObjectAt(coord)) return Err("nothing_there", "(" + x + "," + y + "," + z + ")");
+      BlockObject obj = _blocks.GetBottomObjectAt(coord);
+      if (obj == null) return Err("nothing_there", "(" + x + "," + y + "," + z + ")");
+      var pr = obj.GetComponent<BuilderPrioritizable>();
+      if (pr == null || !pr.Enabled) {
+        return Err("not_a_site", "no active construction site at (" + x + "," + y + "," + z + ")");
+      }
+      if (!TryParsePriority(priorityStr, out Priority p)) return Err("bad_priority", priorityStr);
+      pr.SetPriority(p);
+      return Ok(new { command = "set_priority", x, y, z, priority = p.ToString() });
+    }
+
+    private static bool TryParsePriority(string s, out Priority p) {
+      p = Priority.Normal;
+      if (string.IsNullOrEmpty(s)) return true;
+      switch (s.Trim().ToLowerInvariant()) {
+        case "0": case "verylow": case "very_low": p = Priority.VeryLow; return true;
+        case "1": case "low": p = Priority.Low; return true;
+        case "2": case "normal": p = Priority.Normal; return true;
+        case "3": case "high": p = Priority.High; return true;
+        case "4": case "veryhigh": case "very_high": p = Priority.VeryHigh; return true;
+        default: return false;
+      }
     }
 
     // Execute an ordered list of actions in one main-thread hop:

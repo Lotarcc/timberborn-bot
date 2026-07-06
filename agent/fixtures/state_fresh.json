@@ -1,0 +1,72 @@
+{
+  "buildings": {
+    "counts": {
+      "DistrictCenter.Folktails": 1
+    },
+    "under_construction": 0
+  },
+  "district_center": {
+    "x": 14,
+    "y": 19,
+    "z": 4
+  },
+  "population": {
+    "adults": 13,
+    "bots": 0,
+    "free_beds": 0,
+    "free_workslots": 0,
+    "homeless": 13,
+    "kits": 0,
+    "total": 13,
+    "unemployed": 13
+  },
+  "resources": [
+    {
+      "all_stock": 0,
+      "capacity": 0,
+      "days_remaining": 0,
+      "fill_rate": 0,
+      "good": "Water",
+      "stored": 0
+    },
+    {
+      "all_stock": 0,
+      "capacity": 0,
+      "days_remaining": 0,
+      "fill_rate": 0,
+      "good": "Log",
+      "stored": 0
+    },
+    {
+      "all_stock": 0,
+      "capacity": 0,
+      "days_remaining": 0,
+      "fill_rate": 0,
+      "good": "Plank",
+      "stored": 0
+    },
+    {
+      "all_stock": 0,
+      "capacity": 0,
+      "days_remaining": 0,
+      "fill_rate": 0,
+      "good": "Food",
+      "stored": 0
+    }
+  ],
+  "time": {
+    "cycle": 1,
+    "day": 1,
+    "daytime": "day",
+    "hour": 8
+  },
+  "weather": {
+    "current": "Temperate",
+    "current_ends_in_days": 12.8,
+    "next": {
+      "duration_days": 3,
+      "in_days": 12.8,
+      "type": "Drought"
+    }
+  }
+}

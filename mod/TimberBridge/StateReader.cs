@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Timberborn.BlockSystem;
 using Timberborn.Buildings;
+using Timberborn.BuildingsReachability;
 using Timberborn.ConstructionSites;
 using Timberborn.EntitySystem;
 using Timberborn.GameCycleSystem;
@@ -10,6 +12,7 @@ using Timberborn.Goods;
 using Timberborn.Population;
 using Timberborn.ResourceCountingSystem;
 using Timberborn.TimeSystem;
+using Timberborn.WorkSystem;
 using UnityEngine;
 
 namespace TimberBridge {
@@ -132,6 +135,15 @@ namespace TimberBridge {
                      s.buildings.under_construction + " site(s) under construction.",
                      "Advance time (set_speed 3-5) so builders can finish before placing more."));
       }
+      if (s.buildings != null && s.buildings.list != null) {
+        foreach (BuildingDetailDto b in s.buildings.list) {
+          if (!b.reachable) {
+            alerts.Add(A("building_unreachable", "critical",
+                         b.spec + " at (" + b.x + "," + b.y + "," + b.z + ") is NOT reachable by beavers.",
+                         "Connect it with Path back to the district center, or demolish it and rebuild somewhere reachable."));
+          }
+        }
+      }
       return alerts;
     }
 
@@ -223,6 +235,7 @@ namespace TimberBridge {
 
     private BuildingsDto ReadBuildings() {
       var counts = new Dictionary<string, int>();
+      var list = new List<BuildingDetailDto>();
       foreach (Building b in _entities.GetEnabled<Building>()) {
         string id;
         try {
@@ -232,6 +245,8 @@ namespace TimberBridge {
         }
         counts.TryGetValue(id, out int n);
         counts[id] = n + 1;
+        BuildingDetailDto detail = ReadBuildingDetail(b, id);
+        if (detail != null) list.Add(detail);
       }
 
       int underConstruction = 0;
@@ -239,7 +254,70 @@ namespace TimberBridge {
         underConstruction++;
       }
 
-      return new BuildingsDto { counts = counts, under_construction = underConstruction };
+      return new BuildingsDto { counts = counts, under_construction = underConstruction, list = list };
+    }
+
+    // Per-building status the agent needs to see its own mistakes: finished vs
+    // site (with material progress + what's still missing), paused, staffing,
+    // and REACHABLE — the game's own checks (DistrictBuilding.InstantDistrict for
+    // finished buildings, ReachableConstructionSite.IsReachableByBuilders for
+    // sites), i.e. the same logic behind the in-game "Unconnected"/"Unreachable"
+    // warnings. reachable==false means demolish-or-connect.
+    private BuildingDetailDto ReadBuildingDetail(Building b, string specId) {
+      try {
+        BlockObject block = b.GetComponent<BlockObject>();
+        if (block == null) return null;
+        Vector3Int c = block.Coordinates;
+        var dto = new BuildingDetailDto {
+          spec = specId, x = c.x, y = c.y, z = c.z,
+          progress = -1f, workers = -1, max_workers = -1
+        };
+
+        bool finished = block.IsFinished;
+        var pausable = b.GetComponent<PausableBuilding>();
+        bool paused = pausable != null && pausable.Paused;
+
+        if (finished) {
+          dto.status = paused ? "paused" : "finished";
+          var db = b.GetComponent<DistrictBuilding>();
+          dto.reachable = db == null || db.InstantDistrict != null;
+        } else {
+          dto.status = "site";
+          var site = b.GetComponent<ConstructionSite>();
+          if (site != null) {
+            dto.progress = site.MaterialProgress;
+            dto.missing = ReadMissingMaterials(site);
+          }
+          var rcs = b.GetComponent<ReachableConstructionSite>();
+          dto.reachable = rcs == null || rcs.IsReachableByBuilders();
+        }
+
+        var wp = b.GetComponent<Workplace>();
+        if (wp != null) {
+          dto.workers = wp.NumberOfAssignedWorkers;
+          dto.max_workers = wp.MaxWorkers;
+        }
+        return dto;
+      } catch (Exception e) {
+        Debug.LogError("[TimberBridge] building detail failed for " + specId + ": " + e);
+        return null;
+      }
+    }
+
+    // Goods a construction site still needs: required amount minus in stock —
+    // the same arithmetic the game's FinishNow uses for its top-up.
+    private static Dictionary<string, int> ReadMissingMaterials(ConstructionSite site) {
+      try {
+        var missing = new Dictionary<string, int>();
+        foreach (var g in site.Inventory.AllowedGoods) {
+          string goodId = g.StorableGood.GoodId;
+          int need = g.Amount - site.Inventory.AmountInStock(goodId);
+          if (need > 0) missing[goodId] = need;
+        }
+        return missing.Count > 0 ? missing : null;
+      } catch {
+        return null;
+      }
     }
 
     // Weather forecast (current phase + next hazard). Wrapped so a weather-read
@@ -318,6 +396,20 @@ namespace TimberBridge {
     private class BuildingsDto {
       public Dictionary<string, int> counts;
       public int under_construction;
+      public List<BuildingDetailDto> list;
+    }
+
+    private class BuildingDetailDto {
+      public string spec;
+      public int x;
+      public int y;
+      public int z;
+      public string status;    // finished | paused | site
+      public float progress;   // material progress 0..1 for sites; -1 otherwise
+      public Dictionary<string, int> missing; // goods still needed (sites only)
+      public int workers;      // -1 when not a workplace
+      public int max_workers;
+      public bool reachable;   // game-truth: false => unconnected/unreachable
     }
 
   }

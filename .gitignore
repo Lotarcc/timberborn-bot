@@ -48,3 +48,6 @@ Thumbs.db
 # agent run artifacts
 agent/journal/
 agent/metrics.csv
+
+# generated embedding index (rebuild with: python3 agent/kb.py --build-index)
+agent/kb_index.json
