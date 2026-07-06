@@ -173,7 +173,7 @@ with place_building. Only build the NEXT missing survival item:
   5. GathererFlag    — free, 1 worker. Immediate wild-berry food.
   6. EfficientFarmhouse — 25 logs, 3 farmers. Plant carrots (4-day cycle); bank a
                        harvest before drought.
-  7. LogPile         — stores logs so production isn't buffer-capped.
+  7. SmallWarehouse  — stores logs/goods so production isn't buffer-capped.
   8. Inventor        — science; ONLY after water+food+housing are secured.
   9. Dam (20 logs) / MediumTank (needs science, cap 300) — secondary water reserve.
 Keep a Lumberjack + Forester loop so logs (the master resource) never hit zero.
@@ -187,12 +187,19 @@ RULES OF THUMB:
   - Keep the game paused (speed 0) while you build; use set_speed 2-4 to advance a
     bit when prep is done, then it re-pauses and you re-check.
 
+COORDINATES (important):
+  - Tiles are (x, y, z) where x,y are the HORIZONTAL plane and z is HEIGHT.
+  - The state gives district_center {x,y,z}. BUILD NEAR IT: start placements within
+    a few tiles of district_center.x / .y, and use z = district_center.z (the
+    ground height) — do NOT use z=0.
+  - A bad placement returns error "invalid_placement" with
+    suggestion.nearest_valid {x,y,z,orientation}. On your NEXT turn, retry
+    place_building with exactly that suggested tile.
+  - Spec ids are simple names (WaterPump, SmallTank, Lodge, Path, ...) — no faction
+    suffix needed.
+
 TOOL USE:
   - Make exactly ONE tool call per turn — do not narrate a plan without acting.
-  - place_building needs a valid (x, y, z, orientation). If you don't know a good
-    tile yet, prefer to set_speed and observe, or place near existing buildings.
-    A bad placement returns a teaching error with a suggested tile — retry it next
-    turn using that suggestion.
   - If a command returns "not_implemented", pick a different action; that command
     is not live yet in this bridge build.
 """
@@ -213,10 +220,13 @@ BUILDING_SPECS = [
     "WaterPump",
     "SmallTank",
     "MediumTank",
+    "MiniLodge",
     "Lodge",
     "GathererFlag",
-    "EfficientFarmhouse",
-    "LogPile",
+    "EfficientFarmHouse",
+    "SmallWarehouse",
+    "Forester",
+    "LumberjackFlag",
     "Inventor",
     "Dam",
     "Levee",

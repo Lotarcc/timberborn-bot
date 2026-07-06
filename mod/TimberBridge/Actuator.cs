@@ -7,6 +7,7 @@ using Timberborn.Buildings;
 using Timberborn.ConstructionSites;
 using Timberborn.Coordinates;
 using Timberborn.EntitySystem;
+using Timberborn.GameDistricts;
 using Timberborn.GameSaveRepositorySystem;
 using Timberborn.GameSaveRuntimeSystem;
 using Timberborn.TemplateSystem;
@@ -22,7 +23,7 @@ namespace TimberBridge {
   // with the nearest valid tile so the agent can retry.
   public class Actuator {
 
-    private static readonly Vector3Int[] SearchOffsets = BuildSearchOffsets(4);
+    private static readonly Vector3Int[] SearchOffsets = BuildSearchOffsets(8);
 
     private readonly SpeedManager _speed;
     private readonly TemplateService _templates;
@@ -33,6 +34,7 @@ namespace TimberBridge {
     private readonly EntityService _entities;
     private readonly GameSaver _saver;
     private readonly GameLoader _loader;
+    private readonly DistrictCenterRegistry _districts;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -42,7 +44,8 @@ namespace TimberBridge {
                     ConstructionFactory construction,
                     EntityService entities,
                     GameSaver saver,
-                    GameLoader loader) {
+                    GameLoader loader,
+                    DistrictCenterRegistry districts) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -52,6 +55,7 @@ namespace TimberBridge {
       _entities = entities;
       _saver = saver;
       _loader = loader;
+      _districts = districts;
     }
 
     public string Act(string command, JObject args) {
@@ -88,16 +92,17 @@ namespace TimberBridge {
       var placement = new Placement(coord, o, FlipMode.Unflipped);
 
       if (!_validator.BlocksValid(spec, placement)) {
-        foreach (Vector3Int off in SearchOffsets) {
-          var alt = new Placement(coord + off, o, FlipMode.Unflipped);
-          if (_validator.BlocksValid(spec, alt)) {
-            Vector3Int a = alt.Coordinates;
-            return Err("invalid_placement",
-                       specId + " cannot be placed at (" + x + "," + y + "," + z + ")",
-                       new { nearest_valid = new { x = a.x, y = a.y, z = a.z, orientation = o.ToString() } });
-          }
+        // Search around the guess, then around the district center (where building
+        // actually happens), across a few height levels.
+        Vector3Int found;
+        if (FindValidNear(spec, coord, o, out found)
+            || FindValidNear(spec, GetDistrictCenter(coord), o, out found)) {
+          return Err("invalid_placement",
+                     specId + " invalid at (" + x + "," + y + "," + z + ")",
+                     new { nearest_valid = new { x = found.x, y = found.y, z = found.z, orientation = o.ToString() } });
         }
-        return Err("invalid_placement", specId + " cannot be placed at (" + x + "," + y + "," + z + "); no valid tile within 4");
+        return Err("invalid_placement",
+                   specId + " invalid at (" + x + "," + y + "," + z + "); no buildable tile found near the district center");
       }
 
       string mode;
@@ -129,12 +134,43 @@ namespace TimberBridge {
       return Ok(new { command = "save", name });
     }
 
-    // spec id ("WaterPump") -> BlockObjectSpec. No name-lookup service exists; enumerate templates.
+    // spec id -> BlockObjectSpec. Building ids are faction-qualified
+    // ("WaterPump.Folktails"); accept the bare id too, case-insensitively, so the
+    // agent can just say "WaterPump". Path etc. are bare and match exactly.
     private BlockObjectSpec FindSpec(string specId) {
+      if (string.IsNullOrEmpty(specId)) return null;
       foreach (BlockObjectSpec spec in _templates.GetAll<BlockObjectSpec>()) {
-        if (spec.Blueprint != null && spec.Blueprint.Name == specId) return spec;
+        string name = spec.Blueprint != null ? spec.Blueprint.Name : null;
+        if (name == null) continue;
+        if (string.Equals(name, specId, System.StringComparison.OrdinalIgnoreCase)) return spec;
+        if (name.StartsWith(specId + ".", System.StringComparison.OrdinalIgnoreCase)) return spec;
       }
       return null;
+    }
+
+    private Vector3Int GetDistrictCenter(Vector3Int fallback) {
+      foreach (DistrictCenter dc in _districts.FinishedDistrictCenters) {
+        return dc.CenterCoordinates;
+      }
+      return fallback;
+    }
+
+    // Spiral x/y (nearest-first) at a few height levels around center; first valid wins.
+    private bool FindValidNear(BlockObjectSpec spec, Vector3Int center, Orientation o, out Vector3Int found) {
+      int[] zDeltas = { 0, -1, 1, -2, 2, -3, 3 };
+      foreach (int dz in zDeltas) {
+        int z = center.z + dz;
+        if (z < 0) continue;
+        foreach (Vector3Int off in SearchOffsets) {
+          var c = new Vector3Int(center.x + off.x, center.y + off.y, z);
+          if (_validator.BlocksValid(spec, new Placement(c, o, FlipMode.Unflipped))) {
+            found = c;
+            return true;
+          }
+        }
+      }
+      found = new Vector3Int(0, 0, 0);
+      return false;
     }
 
     private static bool TryParseOrientation(string s, out Orientation o) {

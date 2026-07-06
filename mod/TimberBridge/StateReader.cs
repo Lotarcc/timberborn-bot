@@ -5,10 +5,12 @@ using Timberborn.Buildings;
 using Timberborn.ConstructionSites;
 using Timberborn.EntitySystem;
 using Timberborn.GameCycleSystem;
+using Timberborn.GameDistricts;
 using Timberborn.Goods;
 using Timberborn.Population;
 using Timberborn.ResourceCountingSystem;
 using Timberborn.TimeSystem;
+using UnityEngine;
 
 namespace TimberBridge {
 
@@ -25,19 +27,22 @@ namespace TimberBridge {
     private readonly IGoodService _goods;
     private readonly PopulationService _population;
     private readonly EntityComponentRegistry _entities;
+    private readonly DistrictCenterRegistry _districts;
 
     public StateReader(GameCycleService cycle,
                        IDayNightCycle time,
                        ResourceCountingService resources,
                        IGoodService goods,
                        PopulationService population,
-                       EntityComponentRegistry entities) {
+                       EntityComponentRegistry entities,
+                       DistrictCenterRegistry districts) {
       _cycle = cycle;
       _time = time;
       _resources = resources;
       _goods = goods;
       _population = population;
       _entities = entities;
+      _districts = districts;
     }
 
     public string ReadStateJson() {
@@ -51,7 +56,8 @@ namespace TimberBridge {
         },
         population = ReadPopulation(),
         resources = ReadResources(),
-        buildings = ReadBuildings()
+        buildings = ReadBuildings(),
+        district_center = ReadDistrictCenter()
       };
       return JsonConvert.SerializeObject(dto);
     }
@@ -118,6 +124,15 @@ namespace TimberBridge {
       return new BuildingsDto { counts = counts, under_construction = underConstruction };
     }
 
+    // The main district center's coordinate — the anchor for placement until /map lands.
+    private CoordDto ReadDistrictCenter() {
+      foreach (DistrictCenter dc in _districts.FinishedDistrictCenters) {
+        Vector3Int c = dc.CenterCoordinates;
+        return new CoordDto { x = c.x, y = c.y, z = c.z };
+      }
+      return null;
+    }
+
     // --- DTOs (public fields; serialized by Newtonsoft) ---
 
     private class StateDto {
@@ -126,6 +141,13 @@ namespace TimberBridge {
       public PopulationDto population;
       public List<GoodDto> resources;
       public BuildingsDto buildings;
+      public CoordDto district_center;
+    }
+
+    private class CoordDto {
+      public int x;
+      public int y;
+      public int z;
     }
 
     private class TimeDto {

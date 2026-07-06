@@ -13,6 +13,7 @@ namespace TimberBridge {
       Bind<MainThreadDispatcher>().AsSingleton();
       Bind<StateReader>().AsSingleton();
       Bind<Actuator>().AsSingleton();
+      Bind<BlueprintsReader>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
 
