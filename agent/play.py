@@ -212,13 +212,63 @@ ACTION_SCHEMA = {
 
 # Map each action name -> the /act command string the bridge expects, plus how to
 # turn the model's args into the command's args object.
+def _normalize_coords(a):
+    """Coerce coordinates the model emitted into flat x,y,z. Accepts position as
+    [x,y,z], {x,y,z}, or already-flat keys."""
+    a = dict(a or {})
+    out = dict(a)
+    pos = a.get("position") or a.get("pos") or a.get("coordinates") or a.get("coord")
+    if isinstance(pos, (list, tuple)) and len(pos) >= 3:
+        out["x"], out["y"], out["z"] = pos[0], pos[1], pos[2]
+    elif isinstance(pos, dict):
+        out["x"] = pos.get("x", a.get("x"))
+        out["y"] = pos.get("y", a.get("y"))
+        out["z"] = pos.get("z", a.get("z"))
+    return out
+
+
+_SPEC_KEYS = (
+    "spec", "spec_id", "building", "building_type", "buildingtype", "building_name",
+    "name", "type", "blueprint", "blueprint_name",
+)
+_NON_SPEC_KEYS = {
+    "x", "y", "z", "position", "pos", "coord", "coordinates", "orientation",
+    "instant", "speed", "priority",
+}
+
+
+def _normalize_place_args(a):
+    """place_building: normalize spec id AND coordinates into the bridge's contract.
+    Models invent endless key names for the building id (building/building_type/
+    blueprint/...), so try the known set, then fall back to the first plausible
+    string value that isn't a coordinate/orientation."""
+    a = a or {}
+    out = _normalize_coords(a)
+    spec = None
+    for key in _SPEC_KEYS:
+        if a.get(key):
+            spec = a[key]
+            break
+    if spec is None:  # last resort: any leftover string value that looks like an id
+        for key, val in a.items():
+            if key.lower() in _NON_SPEC_KEYS:
+                continue
+            if isinstance(val, str) and val.strip():
+                spec = val.strip()
+                break
+    if spec is not None:
+        out["spec"] = spec
+    return out
+
+
 ACTION_TO_ACT = {
-    "set_speed": ("set_speed", lambda a: {"speed": a.get("speed", 0)}),
-    # Forward the model's raw args; the bridge normalizes spec/spec_id, flat vs
-    # nested position{x,y,z}, and nulls, and returns a nearest-valid suggestion.
-    "place_building": ("place_building", lambda a: dict(a)),
-    "demolish": ("demolish", lambda a: dict(a)),
-    "set_priority": ("set_priority", lambda a: dict(a)),
+    # An omitted-speed set_speed almost always means "advance time", never pause;
+    # the planner appends speed=3 for advancing, so default to 3 not 0.
+    "set_speed": ("set_speed", lambda a: {"speed": a.get("speed", 3)}),
+    # Normalize spec/coord shapes; the bridge still validates + suggests tiles.
+    "place_building": ("place_building", _normalize_place_args),
+    "demolish": ("demolish", _normalize_coords),
+    "set_priority": ("set_priority", _normalize_coords),
     "save": ("save", lambda a: {"name": a.get("name", "agent")}),
 }
 
