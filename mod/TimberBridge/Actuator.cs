@@ -178,18 +178,26 @@ namespace TimberBridge {
         // Resolve the game's actual access tile(s) for the just-placed building. We need
         // the live BlockObject to read BuildingAccessible; find it at the placed coord.
         List<Vector3Int> accessTiles = ResolveAccessTiles(buildingCoord);
-
-        // Route-start tiles: the access tile(s) if we resolved them (the tiles that must
-        // land on the road — the correct target), else fall back to the old footprint
-        // ring (best-effort for buildings without a BuildingAccessible).
         bool haveAccess = accessTiles != null && accessTiles.Count > 0;
+
+        // The building's own footprint tiles. In access-tile mode these are IMPASSABLE
+        // obstacles for the BFS so the route wraps AROUND the building and never tries to
+        // pave through it (the footprint tiles occupy the Path slot and can't be paved,
+        // and routing "through" them would break contiguity).
+        var footprint = FootprintTiles(buildingCoord, buildingSpec);
+
+        // Seed tiles for the BFS. CONTIGUITY-CRITICAL: seed ONLY the access tile(s) when we
+        // have them, so the reconstructed parent chain is one connected route from an access
+        // tile onto the road. Seeding the footprint ring (multiple disjoint sides) is what
+        // produced the old stranded-segment bug — the DC-side seeds joined the road on their
+        // own while the access-side seed stayed floating behind the building. The footprint
+        // ring is used ONLY as the fallback when the building exposes no access tile.
         List<Vector3Int> startTiles = haveAccess
             ? accessTiles
             : FootprintAdjacentTiles(buildingCoord, buildingSpec);
 
-        // Already connected? For the access-tile path, connected means an access tile is
-        // ITSELF on the road. For the footprint fallback, adjacency to a road tile counts
-        // (the historical behavior — a footprint-adjacent road already connects it).
+        // Already connected? An access tile (or, in fallback, a footprint-adjacent tile)
+        // already ON the road means no paving needed.
         foreach (Vector3Int t in startTiles) {
           if (_reachability.IsTileOnDistrictRoad(t)) {
             return new { connected = true, paths_laid = 0, path_tiles = new object[0],
@@ -197,16 +205,20 @@ namespace TimberBridge {
           }
         }
 
-        // (b) BFS outward from the start tiles (4-neighbour, same z) for the nearest tile
-        // already on the district road. The start tiles are seeded into `parent` mapped
-        // to themselves so the rebuilt route always includes the access tile itself.
+        // (b) Single-source BFS (4-neighbour, same z) from the access tile(s) to the nearest
+        // tile already on the district road. Every visited tile records the parent it was
+        // reached from, so the road tile's parent chain is ONE contiguous path back to an
+        // access tile. Footprint tiles are excluded as obstacles (access-tile mode).
         var parent = new Dictionary<Vector3Int, Vector3Int>();
         var visited = new HashSet<Vector3Int>();
         var queue = new Queue<Vector3Int>();
         Vector3Int roadTile = default(Vector3Int);
         bool foundRoad = false;
 
+        // Seeds map to themselves; the reconstruction stops when parent==self, so the route
+        // always includes the access tile it started from.
         foreach (Vector3Int t in startTiles) {
+          if (haveAccess && footprint.Contains(t)) continue; // never start inside the building
           if (visited.Add(t)) { parent[t] = t; queue.Enqueue(t); }
         }
 
@@ -223,6 +235,7 @@ namespace TimberBridge {
 
           foreach (Vector3Int n in Orthogonal(cur)) {
             if (!visited.Add(n)) continue;
+            if (haveAccess && footprint.Contains(n)) continue; // route AROUND the building
             // Walk a neighbour if we can route through it: it's already on the road,
             // it already carries a path (traverse it, we just won't re-lay), or a fresh
             // Path would validly place there.
@@ -239,10 +252,11 @@ namespace TimberBridge {
                        access_tiles = CoordList(accessTiles) };
         }
 
-        // (c) Rebuild the route road<-...<-accessTile. The start tile maps to itself in
-        // `parent`, so the loop terminates there and the route INCLUDES the access tile —
-        // which is exactly the tile the game tests against the road. Then lay Path on every
-        // route tile that is not already road (access tile included when it isn't road yet).
+        // (c) Reconstruct the single contiguous route road<-...<-accessTile by walking the
+        // parent chain. Because BFS assigns each tile exactly one parent along the edges it
+        // was discovered through, this chain is guaranteed connected (each step is a 4-
+        // neighbour of the next) — it cannot produce disjoint segments. The seed maps to
+        // itself, terminating the walk at the access tile.
         var route = new List<Vector3Int>();
         Vector3Int walk = roadTile;
         while (true) {
@@ -251,13 +265,14 @@ namespace TimberBridge {
           if (!parent.TryGetValue(walk, out prev) || prev.Equals(walk)) break;
           walk = prev;
         }
-        // route is road .. accessTile; drop tiles already on the road (incl. the road end).
-        route.RemoveAll(tile => _reachability.IsTileOnDistrictRoad(tile));
-
+        // route is [road, .., accessTile]. Pave EVERY tile that isn't already on the road:
+        // the access tile plus all intermediate tiles, forming one connected chain onto the
+        // road. Tiles already on the road (the road end) are skipped — they're the target.
         var laid = new List<object>();
         foreach (Vector3Int tile in route) {
+          if (_reachability.IsTileOnDistrictRoad(tile)) continue; // road end / already road
           if (laid.Count >= MaxPathTiles) break;
-          if (HasPathAt(tile)) continue;                 // already a path here
+          if (HasPathAt(tile)) continue;                 // already a path here (still contiguous)
           if (!CanPave(pathSpec, tile)) continue;        // re-validate before creating
           _blockFactory.CreateUnfinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
           laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
@@ -292,13 +307,13 @@ namespace TimberBridge {
       return list;
     }
 
-    // Orthogonal ring of tiles around a building's footprint at the building's z. The
-    // footprint is approximated from the spec's unrotated block size (buildingCoord is
-    // the origin corner). Orientation is ignored — this only needs to be a reasonable
-    // set of seed tiles for the BFS; each actual Path placement is validated separately.
-    // On any uncertainty we fall back to the 4 orthogonal neighbours of buildingCoord.
-    private List<Vector3Int> FootprintAdjacentTiles(Vector3Int buildingCoord, BlockObjectSpec spec) {
-      var result = new List<Vector3Int>();
+    // The building's footprint tiles at its z, approximated from the spec's unrotated
+    // block size (buildingCoord is the origin corner). Orientation is ignored — the size
+    // bounding box is a safe superset of the true footprint (only over-covers when a
+    // rotated non-square building is off-axis), which is exactly what we want when using
+    // it as a BFS obstacle set: never route through the building. Falls back to the single
+    // origin tile on any uncertainty. Guarded — never throws.
+    private HashSet<Vector3Int> FootprintTiles(Vector3Int buildingCoord, BlockObjectSpec spec) {
       var footprint = new HashSet<Vector3Int>();
       try {
         Vector3Int size = spec.Size; // x,y horizontal; z vertical
@@ -315,7 +330,15 @@ namespace TimberBridge {
       if (footprint.Count == 0) {
         footprint.Add(buildingCoord);
       }
-      // Orthogonal neighbours of the footprint that are not themselves in the footprint.
+      return footprint;
+    }
+
+    // Orthogonal ring of tiles around a building's footprint at the building's z — the
+    // FALLBACK BFS seeds when a building exposes no access tile. Each actual Path placement
+    // is validated separately.
+    private List<Vector3Int> FootprintAdjacentTiles(Vector3Int buildingCoord, BlockObjectSpec spec) {
+      var footprint = FootprintTiles(buildingCoord, spec);
+      var result = new List<Vector3Int>();
       var seen = new HashSet<Vector3Int>();
       foreach (Vector3Int f in footprint) {
         foreach (Vector3Int n in Orthogonal(f)) {
