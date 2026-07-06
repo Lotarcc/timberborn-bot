@@ -32,6 +32,7 @@ namespace TimberBridge {
     private readonly EntityComponentRegistry _entities;
     private readonly DistrictCenterRegistry _districts;
     private readonly WeatherReader _weather;
+    private readonly ReachabilityReader _reachability;
 
     public StateReader(GameCycleService cycle,
                        IDayNightCycle time,
@@ -40,7 +41,8 @@ namespace TimberBridge {
                        PopulationService population,
                        EntityComponentRegistry entities,
                        DistrictCenterRegistry districts,
-                       WeatherReader weather) {
+                       WeatherReader weather,
+                       ReachabilityReader reachability) {
       _cycle = cycle;
       _time = time;
       _resources = resources;
@@ -49,6 +51,7 @@ namespace TimberBridge {
       _entities = entities;
       _districts = districts;
       _weather = weather;
+      _reachability = reachability;
     }
 
     public string ReadStateJson() {
@@ -279,8 +282,11 @@ namespace TimberBridge {
 
         if (finished) {
           dto.status = paused ? "paused" : "finished";
-          var db = b.GetComponent<DistrictBuilding>();
-          dto.reachable = db == null || db.InstantDistrict != null;
+          // Game-truth: DistrictBuilding.InstantDistrict for buildings; road-spill
+          // membership for paths/walkables (which have no DistrictBuilding). This
+          // fixes the old `db == null` shortcut that reported unconnected paths as
+          // reachable=true unconditionally.
+          dto.reachable = _reachability.IsObjectReachable(block);
         } else {
           dto.status = "site";
           var site = b.GetComponent<ConstructionSite>();
@@ -288,8 +294,11 @@ namespace TimberBridge {
             dto.progress = site.MaterialProgress;
             dto.missing = ReadMissingMaterials(site);
           }
+          // Sites: builder-specific reachability is the accurate signal. Fall back to
+          // road-spill/DistrictBuilding truth when the site has no ReachableConstructionSite
+          // (e.g. path sites), so an unconnected path site isn't a false positive either.
           var rcs = b.GetComponent<ReachableConstructionSite>();
-          dto.reachable = rcs == null || rcs.IsReachableByBuilders();
+          dto.reachable = rcs != null ? rcs.IsReachableByBuilders() : _reachability.IsObjectReachable(block);
         }
 
         var wp = b.GetComponent<Workplace>();

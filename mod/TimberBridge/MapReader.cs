@@ -21,6 +21,7 @@ namespace TimberBridge
         private readonly ISoilMoistureService _soilMoistureService;// CONFIRMED: Bind<ISoilMoistureService>().To<SoilMoistureService>().AsSingleton()
         private readonly IBlockService _blockService;              // CONFIRMED: Bind<IBlockService>().ToExisting<BlockService>()
         private readonly DistrictCenterRegistry _districtCenterRegistry; // CONFIRMED: Bind<DistrictCenterRegistry>().AsSingleton()
+        private readonly ReachabilityReader _reachability;         // game-truth road-spill reachability per tile
 
         public MapReader(
             MapSize mapSize,
@@ -28,7 +29,8 @@ namespace TimberBridge
             IThreadSafeWaterMap waterMap,
             ISoilMoistureService soilMoistureService,
             IBlockService blockService,
-            DistrictCenterRegistry districtCenterRegistry)
+            DistrictCenterRegistry districtCenterRegistry,
+            ReachabilityReader reachability)
         {
             _mapSize = mapSize;
             _terrainService = terrainService;
@@ -36,6 +38,7 @@ namespace TimberBridge
             _soilMoistureService = soilMoistureService;
             _blockService = blockService;
             _districtCenterRegistry = districtCenterRegistry;
+            _reachability = reachability;
         }
 
         // CONFIRMED: MapSize.TerrainSize2D : Vector2Int -> (width, depth). .z (height) from TerrainSize.
@@ -139,6 +142,19 @@ namespace TimberBridge
             moist.Append(']');
             occupied.Append(']');
 
+            // Game-truth reachability per tile (1=on any district road/road-spill, 0=not).
+            // Same window and row-major indexing as the arrays above: origin (x0,y0),
+            // index = row*w + col, tile x = x0+col, tile y = y0+row.
+            int[] reachGrid = _reachability.ReachabilityGrid(x0, y0, w, h);
+            var reach = new StringBuilder();
+            reach.Append('[');
+            for (int i = 0; i < reachGrid.Length; i++)
+            {
+                if (i > 0) reach.Append(',');
+                reach.Append(reachGrid[i]);
+            }
+            reach.Append(']');
+
             var sb = new StringBuilder();
             sb.Append('{');
             sb.Append("\"origin\":{\"x\":").Append(x0).Append(",\"z\":").Append(y0).Append('}');
@@ -152,6 +168,7 @@ namespace TimberBridge
             sb.Append(",\"contamination\":").Append(contam);
             sb.Append(",\"moist\":").Append(moist);
             sb.Append(",\"occupied\":").Append(occupied);
+            sb.Append(",\"reachable\":").Append(reach);
             sb.Append('}');
             return sb.ToString();
         }

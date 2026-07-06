@@ -68,10 +68,12 @@ namespace TimberBridge {
           case "place_building":
             // Default to a real construction site: beavers haul materials and build
             // it over time, consuming Logs/goods — the actual game loop. Pass
-            // instant=true only for debug/god-mode instant finish.
-            return PlaceBuilding(GetStr(args, "spec") ?? GetStr(args, "spec_id"), GetCoord(args, "x"),
-                                 GetCoord(args, "y"), GetCoord(args, "z"), GetStr(args, "orientation"),
-                                 GetBool(args, "instant", false));
+            // instant=true only for debug/god-mode instant finish. Accept the spec
+            // under any common key models emit (spec/spec_id/building/name).
+            return PlaceBuilding(GetStr(args, "spec") ?? GetStr(args, "spec_id")
+                                   ?? GetStr(args, "building") ?? GetStr(args, "name"),
+                                 GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
+                                 GetStr(args, "orientation"), GetBool(args, "instant", false));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
           case "set_priority":
             return SetPriority(GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
@@ -286,11 +288,20 @@ namespace TimberBridge {
     private static float GetFloat(JObject a, string k, float d) { JToken t = a?[k]; return Present(t) ? t.ToObject<float>() : d; }
     private static bool GetBool(JObject a, string k, bool d) { JToken t = a?[k]; return Present(t) ? t.ToObject<bool>() : d; }
 
-    // Coordinate from flat args[k] or nested args.position[k] (models nest either way).
+    // Coordinate from flat args[k], nested args.position{k}, or a position array
+    // args.position[[x,y,z]] — models emit all three shapes.
     private static int GetCoord(JObject a, string k) {
       JToken t = a?[k];
-      if (!Present(t)) { JObject pos = a?["position"] as JObject; t = pos?[k]; }
-      return Present(t) ? t.ToObject<int>() : 0;
+      if (Present(t)) return t.ToObject<int>();
+      JToken pos = a?["position"] ?? a?["pos"] ?? a?["coordinates"] ?? a?["coord"];
+      if (pos is JObject po) {
+        t = po[k];
+        if (Present(t)) return t.ToObject<int>();
+      } else if (pos is JArray pa) {
+        int idx = k == "x" ? 0 : (k == "y" ? 1 : 2);
+        if (idx < pa.Count && Present(pa[idx])) return pa[idx].ToObject<int>();
+      }
+      return 0;
     }
 
     private static string Ok(object applied) {
