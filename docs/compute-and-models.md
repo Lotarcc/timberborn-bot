@@ -41,15 +41,15 @@ Typical ≈10–13k, spikes ≈16k. **Floor = 16k, target = 32k** (`num_ctx=3276
 ## Latency budget
 Quality-first: **up to ~30–60 s per hard decision is acceptable.** At 32k context this is comfortably met by anything ≥15 tok/s that stays on-GPU. Routine ticks route to the reflex model and return in ~1 s.
 
-## The model ensemble
-| Role | Model | ~Size | Residency | Purpose |
+## The model ensemble (two nodes — see topology below)
+| Role | Model | ~Size | Node | Purpose |
 |---|---|---|---|---|
-| Planner | benchmark winner (candidate `qwen2.5:14b`) | ~9 GB | hot during hard decisions | reason over state, pick actions & designs |
-| Reflex / router | `qwen2.5:3b` (or pure code) | ~2 GB | always hot | triage each tick; wake planner only when needed |
-| Embedder | `nomic-embed-text` (have) / `bge-m3` (A/B) | 0.3–1.2 GB | always hot | semantic retrieval over KB + playbook + design library |
+| Planner | `qwen2.5:7b` @ 32k | ~7.3 GB | Windows GPU (shares with game) | reason over state, pick actions & designs |
+| Reflex / router | code-based (or small `qwen2.5:3b`) | ~0–2 GB | Mac / none | triage each tick; wake planner only when needed |
+| Embedder | `bge-m3` / `nomic-embed-text` | 0.3–1.2 GB | Mac (Metal) | semantic retrieval over KB + playbook + design library |
 | Offline coach | **Claude Code (Fable 5 / Opus 4.8, high–max effort) via Max subscription**; `qwen2.5:14b` fallback | — | between runs only | distill run logs → new lessons/designs (latency-irrelevant, quality-critical) |
 
-Coexistence in 16 GB with `num_parallel=1` + q8 KV: planner ~11–12 GB (weights + 32k KV) + embedder + 3B ≈ 14 GB. Keep the embedder + reflex resident; planner is the big consumer.
+Windows coexistence with `num_parallel=1` + q8 KV: game (5–6 GB reserved) + planner `qwen2.5:7b` (~7.3 GB) + desktop (~1 GB) ≈ 14 GB of 16. The aux models live on the Mac, so the Windows GPU only holds the game + planner.
 
 **Reliability layer:** Ollama's schema-constrained decoding (`format` = JSON schema) forces every action to be valid JSON matching the `act` command enum — the planner physically cannot emit a malformed command. This is what makes even mid-size local models dependable in the loop.
 
@@ -71,8 +71,8 @@ VRAM is split three ways, concurrently: Windows desktop, Timberborn rendering, a
 | Consumer | VRAM | Notes |
 |---|---|---|
 | Windows desktop / overhead | ~0.7–1 GB | dedicated box, keep it lean |
-| Timberborn rendering | ~2–3.5 GB | **measure at first launch**; run at minimal graphics (low preset, ~720–1080p, FPS cap) since the agent, not a human, is watching |
-| Models (must fit the rest) | **≤ ~11 GB** | leaves headroom so the game never gets starved → offloaded/stuttering |
+| Timberborn rendering | **5–6 GB reserved** | per operator; already at "Low" preset, resolution lowered to 1280×720 windowed. Measure actual and adjust |
+| Models on Windows (must fit the rest) | **≤ ~9 GB** | leaves the game its reservation so it never gets starved → offloaded/stuttering |
 
 Two things make this workable: (1) the agent runs the game at **minimal graphics** (no fidelity needed), shrinking its footprint; (2) the loop **pauses the game to think**, so while the planner uses GPU *compute*, the game is a static capped frame using almost none — the pausable design eases compute contention even though a paused frame still holds its VRAM.
 
@@ -102,7 +102,7 @@ The hot path (read state → planner → act) is colocated on Windows; only embe
 | **Hard-call escalation** | frontier Claude (pause game, consult) | cloud | a bigger *local* model can't coexist with the game; the game is pausable |
 | **Offline coach** | Claude Code (Fable 5 / Opus 4.8, high–max) via Max sub | Mac (cloud) | between-run retrospectives; `qwen2.5:14b` on Windows as unattended fallback |
 
-All action outputs use Ollama schema-constrained decoding (`format`) so the 7B can't emit an invalid command. With the aux models on the Mac, the Windows planner budget grows to ~12 GB — if first-launch measurement shows the game is light, `mistral-nemo:12b` @ 16k becomes a possible quality upgrade. Decide after measuring.
+All action outputs use Ollama schema-constrained decoding (`format`) so the 7B can't emit an invalid command. With 5–6 GB reserved for the game, the Windows planner budget is ~9 GB, so `qwen2.5:7b` is the fit; a 12B only if the game measures well under its reservation. Decide after measuring actual game VRAM in-play.
 
 ## Server ops (how Ollama is run on the box)
 Config persisted via `setx` (`OLLAMA_NUM_PARALLEL=1`, `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_KEEP_ALIVE=30m`). The tray app won't launch into the interactive desktop over SSH; restart the server detached with `Win32_Process.Create("cmd /c \"set OLLAMA_*=...&& ollama.exe serve\"")` (survives the SSH session, runs headless in session 0, GPU compute unaffected). For permanent unattended use, promote to a scheduled task / service.
