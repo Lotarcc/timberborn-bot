@@ -1,0 +1,46 @@
+# Secrets & local config — never commit
+.env
+.env.*
+*.local
+secrets*
+*.key
+*.pem
+*.pfx
+
+# .NET / Unity mod build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.csproj.user
+[Bb]uild/
+[Tt]emp/
+[Ll]ibrary/
+*.dll
+*.pdb
+
+# Python (agent)
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# Node (dashboard/tooling)
+node_modules/
+dist/
+
+# Models & large binaries
+*.gguf
+*.onnx
+
+# Timberborn saves (force-add specific test checkpoints with `git add -f`)
+*.timber
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
