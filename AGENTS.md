@@ -5,6 +5,18 @@ Guidelines for any AI agent (or human) working in this repo. Read `README.md` an
 ## What this project is
 A local, cheaper LLM that autonomously plays Timberborn (v1.0.13.1) and improves across runs via scaffolded memory — not weight updates. Four subsystems: the `TimberBridge` C# mod (observe/act HTTP API inside the game), the player-agent loop, a tiered local-model stack on Ollama, and a four-tier learning memory. `docs/PROJECT.md` is the source of truth for phases and status.
 
+## Current mode (2026-07, autonomous build)
+Phase 0 done; Phase 1 `/state` returns real digested game data. **Iteration happens on the Mac**: Timberborn runs locally on the M1 Pro (shell launch/kill via `open`/`pkill`, no RDP/SSH friction), while the models run on the Windows box (its 4060 Ti is now free of the game). The `TimberBridge` DLL is identical on both hosts (`netstandard2.1`, `-p:TimberbornManaged=<host Managed path>`).
+
+Working principles for this phase — **follow these**:
+- **Don't disturb the operator's screen.** Run the game windowed and, where possible, backgrounded / on a separate Space so they can work while I do. Interact through the bridge over HTTP; never screen-control for routine work. Use computer-use only as a genuine last resort (e.g. one dialog click).
+- **Batch mod changes; reload sparingly.** A reload closes/relaunches the game — group changes so it happens rarely.
+- **Commit + push after every meaningful step.** Keep the public repo current. Keep infra/secrets (paths, account names, IPs) in local agent memory, never in the repo.
+- **Parallelize with subagents** for decomposable research/drafting.
+- **Prefer the game's own APIs** (reflected/decompiled, called in-process) over synthesized input or pixel-pushing — reliable and non-intrusive.
+
+Dev reload loop: edit mod → `mac-reload.sh` (build → deploy → autoload marker → `open` launch → poll → `/state`). New colonies start via `GameSceneLoader.StartNewGameInstantly(factionId, mapRef, settlementName)`; existing saves via `StartMostRecentSaveInstantly()`.
+
 ## Doc map (keep these current)
 - `docs/PROJECT.md` — phased plan, tests, risks, **current status**. Update status when a phase moves.
 - `docs/ARCHITECTURE.md` — system overview.
