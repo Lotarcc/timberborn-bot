@@ -69,7 +69,7 @@ run N:  play using KB + retrieved lessons + best designs; append every
         decision + outcome to the run journal
         │
         ▼
-coach (offline, bigger/slower model or Claude API):
+coach (offline — frontier Claude, see below):
         read journal + final metrics →
           • what killed or saved the colony?
           • append/update playbook lessons (adjust confidence from evidence)
@@ -80,6 +80,15 @@ coach (offline, bigger/slower model or Claude API):
 run N+1: retrieves the improved lessons/designs; evaluator A/B-tests the
          new variants against incumbents from checkpoint saves
 ```
+
+## The coach — frontier Claude between runs
+The retrospective is latency-irrelevant and quality-critical, so the coach is **Claude Code driven by the Max subscription** (Fable 5 or Opus 4.8 at high/xhigh/max effort), not a local model. It runs as a headless session between colony runs: reads the run journal + final metrics + the current playbook and design library, does root-cause analysis, and writes updated lessons and new design variants directly back into memory. Cost is absorbed by the subscription; the run cadence (once per colony, minutes-to-hours apart) sits well inside Max limits.
+
+Division of labor: **cheap local models play in real time; frontier Claude reflects offline.** This is the "expensive reasoning done once, distilled into cheap-to-apply memory" principle — the expensive reasoner is now an actual frontier model, invoked rarely.
+
+Fallbacks / options:
+- **Unattended fallback:** if Claude Code isn't available (fully offline run), the coach falls back to the local `qwen2.5:14b` — degraded but keeps learning.
+- **Mid-run consult (optional):** because the game is pausable, a genuinely stuck mid-run decision can pause and consult the same frontier coach rather than the local escalation planner. Use sparingly (rate limits, round-trip latency); the default hard-case escalator stays local (`qwen2.5:14b`).
 
 ## The learning curve (what "getting better" means, and how we prove it)
 A curriculum of escalating goals, each unlocking finer micro-optimization once the prior is reliable:

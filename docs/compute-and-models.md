@@ -45,7 +45,7 @@ Quality-first: **up to ~30–60 s per hard decision is acceptable.** At 32k cont
 | Planner | benchmark winner (candidate `qwen2.5:14b`) | ~9 GB | hot during hard decisions | reason over state, pick actions & designs |
 | Reflex / router | `qwen2.5:3b` (or pure code) | ~2 GB | always hot | triage each tick; wake planner only when needed |
 | Embedder | `nomic-embed-text` (have) / `bge-m3` (A/B) | 0.3–1.2 GB | always hot | semantic retrieval over KB + playbook + design library |
-| Offline coach | reuse planner, or Claude API | — | between runs only | distill run logs → new lessons/designs (latency-irrelevant) |
+| Offline coach | **Claude Code (Fable 5 / Opus 4.8, high–max effort) via Max subscription**; `qwen2.5:14b` fallback | — | between runs only | distill run logs → new lessons/designs (latency-irrelevant, quality-critical) |
 
 Coexistence in 16 GB with `num_parallel=1` + q8 KV: planner ~11–12 GB (weights + 32k KV) + embedder + 3B ≈ 14 GB. Keep the embedder + reflex resident; planner is the big consumer.
 
@@ -67,7 +67,8 @@ The fix moved a 14B from 4 → 18 tok/s, but at 32k it sits at 14.6 GB (96% GPU)
 | Role | Model | Why |
 |---|---|---|
 | **Planner (default)** | `mistral-nemo:12b` | 39.5 tok/s, 100% on-GPU at 32k, clean JSON, 4.4 GB headroom keeps the ensemble hot |
-| **Escalation + offline coach** | `qwen2.5:14b` | smartest; used for hard/novel decisions and between-run retrospectives where 18 tok/s / VRAM pressure don't matter |
+| **Escalation planner** | `qwen2.5:14b` | smartest *local* model; hard/novel mid-run decisions; also the unattended coach fallback |
+| **Offline coach** | Claude Code (Fable 5 / Opus 4.8, high–max effort) via Max subscription | between-run retrospectives — frontier quality, no per-token cost, latency irrelevant |
 | **Reflex / router** | `qwen2.5:3b` | routine ticks in ~1 s |
 | **Embedder** | `bge-m3` (primary), `nomic-embed-text` (light fallback) | retrieval quality drives "recall the right lesson" |
 
