@@ -4,7 +4,9 @@ The player agent runs on **local Ollama**, not the Claude API. Cheaper for an al
 
 ## Hardware (measured)
 - GPU: **NVIDIA RTX 4060 Ti, 16 GB** (≈14.8 GB free at idle), driver 610.62.
-- CPU: Intel i5-9600KF (6c/6t) · RAM: 32 GB · Ollama models on `F:\Ollama\models` (217 GB free).
+- CPU: Intel i5-9600**KF** (6c/6t, **no integrated GPU**) · RAM: 32 GB · Ollama models on `F:\Ollama\models` (217 GB free).
+- **The game renders on the same 4060 Ti** — the KF has no iGPU to offload display to, so Timberborn and any model on this box share one 16 GB pool. This is the binding constraint (see "Sharing the GPU").
+- **Second node: M1 Pro MacBook** — Apple M1 Pro, 16 GB unified, 14-core GPU (Metal). Hosts the small auxiliary models (embedder, optional reflex) so they don't touch the contended Windows GPU. On the LAN (192.168.88.x); Ollama not yet installed there (setup step).
 - Ollama `0.24.0`, API at `127.0.0.1:11434`, runs as the tray app (no Windows service).
 
 ## The critical config finding
@@ -61,18 +63,46 @@ All at `num_ctx=32768`, `NUM_PARALLEL=1` + flash attention + q8 KV. gen tok/s me
 | `qwen2.5:7b` | 59.7 | 13875 | 7.3 GB | 100% | clean |
 | `llama3.1:8b` | 58.7 | 13209 | 9.0 GB | 100% | clean |
 
-The fix moved a 14B from 4 → 18 tok/s, but at 32k it sits at 14.6 GB (96% GPU) — no room for the embedder + reflex to stay resident, and its raw JSON was slightly off.
+The fix moved a 14B from 4 → 18 tok/s. Those numbers assume the whole card is ours — but during play it isn't (see below).
+
+## Sharing the GPU with the game (the real budget)
+VRAM is split three ways, concurrently: Windows desktop, Timberborn rendering, and the models. Rough budget on the 16 GB card:
+
+| Consumer | VRAM | Notes |
+|---|---|---|
+| Windows desktop / overhead | ~0.7–1 GB | dedicated box, keep it lean |
+| Timberborn rendering | ~2–3.5 GB | **measure at first launch**; run at minimal graphics (low preset, ~720–1080p, FPS cap) since the agent, not a human, is watching |
+| Models (must fit the rest) | **≤ ~11 GB** | leaves headroom so the game never gets starved → offloaded/stuttering |
+
+Two things make this workable: (1) the agent runs the game at **minimal graphics** (no fidelity needed), shrinking its footprint; (2) the loop **pauses the game to think**, so while the planner uses GPU *compute*, the game is a static capped frame using almost none — the pausable design eases compute contention even though a paused frame still holds its VRAM.
+
+Ordering matters: keep the Windows model footprint small enough that even if it loads first, the game can still claim its 2–3.5 GB.
+
+## Distributed topology (two nodes)
+Offload the small, always-on auxiliary models to the MacBook so the Windows GPU holds only the game + the planner.
+
+```
+Windows (4060 Ti 16GB)                 M1 Pro Mac (16GB unified)
+  Timberborn (minimal graphics)          Ollama/Metal: embedder (+ optional reflex 3B)
+  TimberBridge mod  (HTTP :7744)         Claude Code = offline coach
+  Ollama: PLANNER  (HTTP :11434)         agent orchestrator (dev) — or run it on Windows
+        └── game + planner share VRAM          │
+                    ▲                           │  LAN 192.168.88.x
+                    └──── SSH tunnels ──────────┘  (bridge :7744, Windows Ollama → :11435;
+                                                    Mac Ollama local :11434)
+```
+The hot path (read state → planner → act) is colocated on Windows; only embedding retrieval crosses the LAN. Fallback if the Mac is off: run the embedder on the Windows CPU.
 
 ## Decision (roles)
-| Role | Model | Why |
-|---|---|---|
-| **Planner (default)** | `mistral-nemo:12b` | 39.5 tok/s, 100% on-GPU at 32k, clean JSON, 4.4 GB headroom keeps the ensemble hot |
-| **Escalation planner** | `qwen2.5:14b` | smartest *local* model; hard/novel mid-run decisions; also the unattended coach fallback |
-| **Offline coach** | Claude Code (Fable 5 / Opus 4.8, high–max effort) via Max subscription | between-run retrospectives — frontier quality, no per-token cost, latency irrelevant |
-| **Reflex / router** | `qwen2.5:3b` | routine ticks in ~1 s |
-| **Embedder** | `bge-m3` (primary), `nomic-embed-text` (light fallback) | retrieval quality drives "recall the right lesson" |
+| Role | Model | Where | Why |
+|---|---|---|---|
+| **Planner (default)** | `qwen2.5:7b` @ 32k (~7.3 GB) | Windows GPU | fits alongside the game with room; 59 tok/s; clean JSON |
+| **Embedder** | `bge-m3` / `nomic-embed-text` | **Mac (Metal)** | constant retrieval, off the contended GPU |
+| **Reflex / router** | code-based triage (or small `qwen2.5:3b` on Mac) | Mac / none | "no alerts + healthy buffers → advance" is a rule; a Mac model only if judgment needed |
+| **Hard-call escalation** | frontier Claude (pause game, consult) | cloud | a bigger *local* model can't coexist with the game; the game is pausable |
+| **Offline coach** | Claude Code (Fable 5 / Opus 4.8, high–max) via Max sub | Mac (cloud) | between-run retrospectives; `qwen2.5:14b` on Windows as unattended fallback |
 
-All action outputs use Ollama schema-constrained decoding (`format`), so even the mid-size planner can't emit an invalid command. Fast fallback if headroom is ever needed: `qwen2.5:7b`.
+All action outputs use Ollama schema-constrained decoding (`format`) so the 7B can't emit an invalid command. With the aux models on the Mac, the Windows planner budget grows to ~12 GB — if first-launch measurement shows the game is light, `mistral-nemo:12b` @ 16k becomes a possible quality upgrade. Decide after measuring.
 
 ## Server ops (how Ollama is run on the box)
 Config persisted via `setx` (`OLLAMA_NUM_PARALLEL=1`, `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_KEEP_ALIVE=30m`). The tray app won't launch into the interactive desktop over SSH; restart the server detached with `Win32_Process.Create("cmd /c \"set OLLAMA_*=...&& ollama.exe serve\"")` (survives the SSH session, runs headless in session 0, GPU compute unaffected). For permanent unattended use, promote to a scheduled task / service.
