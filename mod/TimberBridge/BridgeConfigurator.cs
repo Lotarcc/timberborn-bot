@@ -11,10 +11,12 @@ namespace TimberBridge {
 
     protected override void Configure() {
       Bind<MainThreadDispatcher>().AsSingleton();
+      Bind<WeatherReader>().AsSingleton();
       Bind<StateReader>().AsSingleton();
       Bind<Actuator>().AsSingleton();
       Bind<BlueprintsReader>().AsSingleton();
       Bind<MapReader>().AsSingleton();
+      Bind<ScreenshotReader>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
 

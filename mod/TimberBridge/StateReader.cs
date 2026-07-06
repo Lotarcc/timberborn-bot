@@ -28,6 +28,7 @@ namespace TimberBridge {
     private readonly PopulationService _population;
     private readonly EntityComponentRegistry _entities;
     private readonly DistrictCenterRegistry _districts;
+    private readonly WeatherReader _weather;
 
     public StateReader(GameCycleService cycle,
                        IDayNightCycle time,
@@ -35,7 +36,8 @@ namespace TimberBridge {
                        IGoodService goods,
                        PopulationService population,
                        EntityComponentRegistry entities,
-                       DistrictCenterRegistry districts) {
+                       DistrictCenterRegistry districts,
+                       WeatherReader weather) {
       _cycle = cycle;
       _time = time;
       _resources = resources;
@@ -43,6 +45,7 @@ namespace TimberBridge {
       _population = population;
       _entities = entities;
       _districts = districts;
+      _weather = weather;
     }
 
     public string ReadStateJson() {
@@ -57,7 +60,8 @@ namespace TimberBridge {
         population = ReadPopulation(),
         resources = ReadResources(),
         buildings = ReadBuildings(),
-        district_center = ReadDistrictCenter()
+        district_center = ReadDistrictCenter(),
+        weather = ReadWeather()
       };
       return JsonConvert.SerializeObject(dto);
     }
@@ -78,6 +82,7 @@ namespace TimberBridge {
 
     private List<GoodDto> ReadResources() {
       var list = new List<GoodDto>();
+      int pop = _population.GlobalPopulationData.TotalPopulation;
       foreach (string goodId in _goods.Goods) {
         ResourceCount c = _resources.GetGlobalResourceCount(goodId);
         // Show a good if it's present, has storage, OR is a core survival good
@@ -86,15 +91,25 @@ namespace TimberBridge {
         if (!present && !IsCoreGood(goodId)) {
           continue;
         }
-        list.Add(new GoodDto {
+        var dto = new GoodDto {
           good = goodId,
           stored = c.AvailableStock,
           all_stock = c.AllStock,
           capacity = c.InputOutputCapacity,
           fill_rate = c.FillRate
-        });
+        };
+        // Days of supply for goods with a known per-beaver daily use (the survival number).
+        float perDay = DailyUsePerBeaver(goodId);
+        dto.days_remaining = (perDay > 0f && pop > 0) ? c.AvailableStock / (pop * perDay) : -1f;
+        list.Add(dto);
       }
       return list;
+    }
+
+    // Per-beaver daily consumption (KB). Water is the survival-critical one; food is
+    // spread across many goods, so the agent sums food itself using the KB rate 2.67.
+    private static float DailyUsePerBeaver(string goodId) {
+      return goodId == "Water" ? 2.13f : 0f;
     }
 
     // Goods that must appear in /state even at zero stock/capacity (survival-critical).
@@ -124,6 +139,17 @@ namespace TimberBridge {
       return new BuildingsDto { counts = counts, under_construction = underConstruction };
     }
 
+    // Weather forecast (current phase + next hazard). Wrapped so a weather-read
+    // failure never takes down the whole /state snapshot.
+    private WeatherReader.WeatherDto ReadWeather() {
+      try {
+        return _weather.Read();
+      } catch (Exception e) {
+        Debug.LogError("[TimberBridge] weather read failed: " + e);
+        return null;
+      }
+    }
+
     // The main district center's coordinate — the anchor for placement until /map lands.
     private CoordDto ReadDistrictCenter() {
       foreach (DistrictCenter dc in _districts.FinishedDistrictCenters) {
@@ -142,6 +168,7 @@ namespace TimberBridge {
       public List<GoodDto> resources;
       public BuildingsDto buildings;
       public CoordDto district_center;
+      public WeatherReader.WeatherDto weather;
     }
 
     private class CoordDto {
@@ -174,6 +201,7 @@ namespace TimberBridge {
       public int all_stock;
       public int capacity;
       public float fill_rate;
+      public float days_remaining; // -1 if not computed (unknown per-beaver use)
     }
 
     private class BuildingsDto {

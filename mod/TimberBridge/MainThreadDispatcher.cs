@@ -45,9 +45,17 @@ namespace TimberBridge {
   public class BridgePump : MonoBehaviour {
 
     public MainThreadDispatcher Dispatcher;
+    // A separate queue drained at end-of-frame. Screenshot capture
+    // (ScreenCapture.CaptureScreenshotAsTexture) must run in LateUpdate, after the
+    // frame is fully composited, or it grabs a partially-rendered backbuffer.
+    public MainThreadDispatcher LateDispatcher;
 
     private void Update() {
       Dispatcher?.Drain();
+    }
+
+    private void LateUpdate() {
+      LateDispatcher?.Drain();
     }
 
   }

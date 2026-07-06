@@ -29,6 +29,14 @@ import traceback
 import urllib.error
 import urllib.request
 
+try:
+    from kb import lookup as kb_lookup
+except Exception:  # pragma: no cover - import path depends on invocation style
+    try:
+        from agent.kb import lookup as kb_lookup
+    except Exception:  # pragma: no cover - agent can still run without KB
+        kb_lookup = None
+
 # ---------------------------------------------------------------------------
 # HTTP shim: prefer requests, fall back to urllib so the script has zero hard deps.
 # Both paths expose one helper: http_json(method, url, body, timeout) -> (status, dict).
@@ -116,7 +124,8 @@ tile) you correct next turn. When unsure of a tile, use the suggested one.
 
 DECISION LOOP (each turn):
 1. You are given the current digested colony state (population, resources with
-   days_remaining, weather forecast, buildings).
+   days_remaining, weather forecast, buildings), a compact map summary, candidate
+   placement tiles, and KB rules retrieved for the current situation.
 2. Keep/refresh a short layout plan: the next 3-4 buildings AND roughly where they
    go, chosen so survival needs are met AND the colony stays connected and
    expandable (see COLONY LAYOUT).
@@ -138,6 +147,27 @@ COLONY LAYOUT (plan ahead - do NOT just react to the immediate gap):
     shelter are secured.
   - Minimize beaver travel: put workplaces near housing and the goods they use.
   - Lay the Path that connects a new building in the same few turns you place it.
+
+PLACEMENT + PATHING (use the compact map summary; never guess blindly):
+  - Always place with z = terrain_height for that exact map tile. Coordinates are
+    place_building x=<map x>, y=<map y>, z=<terrain_height>.
+  - WaterPump: place ONLY on a clean-water edge: a free LAND tile adjacent to
+    water_depth>0 AND contamination==0. NEVER place a pump on/next to badwater
+    contamination>0, and never place a pump on an occupied tile.
+  - SmallTank, Lodge, SmallWarehouse, LogPile, Inventor: place on flat, dry,
+    uncontaminated, unoccupied land near the WaterPump and district center.
+  - EfficientFarmhouse and crop support: place near moist/farmable soil; farms
+    belong on moist soil with nearby path access.
+  - Path: every WaterPump, tank, lodge, storage, farmhouse, gatherer, lumberjack,
+    and inventor must connect back to the District Center by Path. If a new
+    building is not connected, place Path toward it before unrelated work.
+  - Prefer compact rows and short path spines near the district center. Leave
+    expansion slots for more tanks and more lodges; do not scatter buildings.
+  - If /act returns invalid_placement with suggestion.nearest_valid, your NEXT
+    place_building action should reuse exactly that x,y,z,orientation unless it
+    would violate clean-water/badwater rules.
+  - Prefer the listed candidate tiles from the map summary. If candidates exist
+    for the needed building, use one of them exactly.
 
 SURVIVAL PRIORITY (satisfy top-down; never let a lower need steal labor from an
 unmet higher one):
@@ -189,9 +219,9 @@ RULES OF THUMB:
 
 COORDINATES (important):
   - Tiles are (x, y, z) where x,y are the HORIZONTAL plane and z is HEIGHT.
-  - The state gives district_center {x,y,z}. BUILD NEAR IT: start placements within
-    a few tiles of district_center.x / .y, and use z = district_center.z (the
-    ground height) — do NOT use z=0.
+  - The map gives tiles as x=origin.x+col and y=origin.z+row; z is
+    terrain_height[index]. BUILD NEAR the district center but use the tile's own
+    terrain_height — do NOT use z=0 and do NOT blindly reuse district_center.z.
   - A bad placement returns error "invalid_placement" with
     suggestion.nearest_valid {x,y,z,orientation}. On your NEXT turn, retry
     place_building with exactly that suggested tile.
@@ -250,6 +280,9 @@ class Bridge:
 
     def state(self):
         return http_json("GET", self.base + "/state", timeout=BRIDGE_TIMEOUT)
+
+    def map(self):
+        return http_json("GET", self.base + "/map", timeout=BRIDGE_TIMEOUT)
 
     def act(self, command, args):
         body = {"command": command, "args": args}
@@ -391,6 +424,342 @@ def compact_state(state):
                 )
 
     return "CURRENT STATE:\n" + "\n".join(lines)
+
+
+def _as_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _resource_by_good(state):
+    resources = {}
+    for item in (state.get("resources", []) if isinstance(state, dict) else []) or []:
+        if isinstance(item, dict) and item.get("good") is not None:
+            resources[str(item.get("good")).lower()] = item
+    return resources
+
+
+def _building_count(state, spec):
+    counts = (((state or {}).get("buildings", {}) or {}).get("counts", {}) or {})
+    if spec in counts:
+        return _as_int(counts.get(spec), 0)
+    lowered = spec.lower()
+    for key, value in counts.items():
+        if str(key).lower() == lowered:
+            return _as_int(value, 0)
+    return 0
+
+
+def _next_hazard_days(state):
+    weather = (state.get("weather", {}) if isinstance(state, dict) else {}) or {}
+    nxt = weather.get("next", {}) or {}
+    return _as_float(nxt.get("duration_days"), 0.0)
+
+
+def infer_next_building_type(state):
+    """Small deterministic hint used for map candidates and KB query construction."""
+    if not isinstance(state, dict):
+        return "WaterPump"
+
+    if _building_count(state, "WaterPump") <= 0:
+        return "WaterPump"
+
+    population = (state.get("population", {}) or {}).get("total")
+    p = max(_as_int(population, 0), 1)
+    required_water = (_next_hazard_days(state) + 2.0) * 2.13 * p
+    required_tanks = int((required_water + 29.999) // 30) if required_water > 0 else 1
+    tanks = (
+        _building_count(state, "SmallTank")
+        + _building_count(state, "MediumTank") * 10
+        + _building_count(state, "LargeWaterTank") * 10
+    )
+    resources = _resource_by_good(state)
+    water_days = _as_float((resources.get("water") or {}).get("days_remaining"), 999.0)
+    if tanks < max(required_tanks, 1) or water_days < _next_hazard_days(state) + 2.0:
+        return "SmallTank"
+
+    pop = state.get("population", {}) or {}
+    if _as_int(pop.get("homeless"), 0) > 0 or _as_int(pop.get("free_beds"), 0) < 0:
+        return "Lodge"
+
+    if _building_count(state, "GathererFlag") <= 0:
+        return "GathererFlag"
+    if _building_count(state, "EfficientFarmhouse") <= 0:
+        return "EfficientFarmhouse"
+    if _building_count(state, "SmallWarehouse") <= 0:
+        return "SmallWarehouse"
+    return "Path"
+
+
+def _map_arrays(map_data):
+    if not isinstance(map_data, dict):
+        return None
+    width = _as_int(map_data.get("width"), 0)
+    height = _as_int(map_data.get("height"), 0)
+    origin = map_data.get("origin", {}) or {}
+    if width <= 0 or height <= 0:
+        return None
+    total = width * height
+    terrain = map_data.get("terrain_height") or []
+    water = map_data.get("water_depth") or []
+    contamination = map_data.get("contamination") or []
+    moist = map_data.get("moist")
+    if moist is None:
+        moist = map_data.get("moisture")
+    occupied = map_data.get("occupied") or []
+    if len(terrain) < total:
+        return None
+    return {
+        "origin_x": _as_int(origin.get("x"), 0),
+        "origin_y": _as_int(origin.get("z", origin.get("y", 0)), 0),
+        "width": width,
+        "height": height,
+        "terrain": terrain,
+        "water": water,
+        "contamination": contamination,
+        "moist": moist or [],
+        "occupied": occupied,
+    }
+
+
+def _array_value(values, index, default=0):
+    if not isinstance(values, list) or index < 0 or index >= len(values):
+        return default
+    return values[index]
+
+
+def _tile(arrays, col, row):
+    width = arrays["width"]
+    height = arrays["height"]
+    if col < 0 or row < 0 or col >= width or row >= height:
+        return None
+    index = row * width + col
+    return {
+        "x": arrays["origin_x"] + col,
+        "y": arrays["origin_y"] + row,
+        "z": _array_value(arrays["terrain"], index, 0),
+        "water": _as_float(_array_value(arrays["water"], index, 0), 0.0),
+        "contamination": _as_float(
+            _array_value(arrays["contamination"], index, 0), 0.0
+        ),
+        "moist": _as_int(_array_value(arrays["moist"], index, 0), 0),
+        "occupied": _as_int(_array_value(arrays["occupied"], index, 0), 0),
+        "col": col,
+        "row": row,
+    }
+
+
+def _district_center_xy(map_data, arrays):
+    dc = (map_data.get("district_center", {}) if isinstance(map_data, dict) else {}) or {}
+    if "x" in dc:
+        cx = _as_int(dc.get("x"), arrays["origin_x"] + arrays["width"] // 2)
+    else:
+        cx = arrays["origin_x"] + arrays["width"] // 2
+    cy = _as_int(dc.get("z", dc.get("y", arrays["origin_y"] + arrays["height"] // 2)))
+    return cx, cy
+
+
+def _tile_distance(tile, cx, cy):
+    return abs(tile["x"] - cx) + abs(tile["y"] - cy)
+
+
+def _same_height_dry_neighbors(arrays, tile):
+    same = 0
+    for dx, dy, _ in ((0, -1, "North"), (1, 0, "East"), (0, 1, "South"), (-1, 0, "West")):
+        other = _tile(arrays, tile["col"] + dx, tile["row"] + dy)
+        if not other:
+            continue
+        if (
+            _as_float(other["z"]) == _as_float(tile["z"])
+            and other["water"] <= 0
+            and other["contamination"] <= 0
+            and other["occupied"] == 0
+        ):
+            same += 1
+    return same
+
+
+def _format_tile(tile, extra=None):
+    parts = ["x=%s" % tile["x"], "y=%s" % tile["y"], "z=%s" % tile["z"]]
+    if extra:
+        parts.extend(extra)
+    return "(" + ",".join(parts) + ")"
+
+
+def _format_tile_list(tiles, limit=6):
+    if not tiles:
+        return "none"
+    return "; ".join(_format_tile(tile, tile.get("extra")) for tile in tiles[:limit])
+
+
+def compact_map_summary(map_data, state, next_spec):
+    """Summarize /map into placement-relevant facts and candidate tiles only."""
+    arrays = _map_arrays(map_data)
+    if arrays is None:
+        return {
+            "text": "MAP: <unavailable or malformed>",
+            "candidates": [],
+            "error": "malformed_map",
+        }
+
+    width = arrays["width"]
+    height = arrays["height"]
+    cx, cy = _district_center_xy(map_data, arrays)
+    center_col = cx - arrays["origin_x"]
+    center_row = cy - arrays["origin_y"]
+    center_tile = _tile(arrays, center_col, center_row)
+
+    clean_edges = []
+    flat_dry = []
+    moist_tiles = []
+    path_tiles = []
+    areas = {
+        "NW": {"free": 0, "occupied": 0},
+        "NE": {"free": 0, "occupied": 0},
+        "SW": {"free": 0, "occupied": 0},
+        "SE": {"free": 0, "occupied": 0},
+    }
+    directions = ((0, -1, "North"), (1, 0, "East"), (0, 1, "South"), (-1, 0, "West"))
+
+    for row in range(height):
+        for col in range(width):
+            tile = _tile(arrays, col, row)
+            if tile is None:
+                continue
+
+            east_west = "W" if tile["x"] < cx else "E"
+            north_south = "N" if tile["y"] < cy else "S"
+            area = areas[north_south + east_west]
+            if tile["occupied"]:
+                area["occupied"] += 1
+            elif tile["water"] <= 0 and tile["contamination"] <= 0:
+                area["free"] += 1
+
+            if tile["occupied"] or tile["contamination"] > 0:
+                continue
+
+            is_land = tile["water"] <= 0
+            if not is_land:
+                continue
+
+            clean_water_dirs = []
+            badwater_dirs = []
+            for dx, dy, direction in directions:
+                other = _tile(arrays, col + dx, row + dy)
+                if not other or other["water"] <= 0:
+                    continue
+                if other["contamination"] > 0:
+                    badwater_dirs.append(direction)
+                else:
+                    clean_water_dirs.append(direction)
+
+            if clean_water_dirs and not badwater_dirs:
+                candidate = dict(tile)
+                candidate["extra"] = ["water=%s" % clean_water_dirs[0], "orientation=%s" % clean_water_dirs[0]]
+                clean_edges.append(candidate)
+
+            same_height = _same_height_dry_neighbors(arrays, tile)
+            if same_height >= 2 and not clean_water_dirs and not badwater_dirs:
+                candidate = dict(tile)
+                candidate["extra"] = ["flat_neighbors=%s" % same_height]
+                flat_dry.append(candidate)
+
+            if tile["moist"] == 1:
+                candidate = dict(tile)
+                candidate["extra"] = ["moist=1"]
+                moist_tiles.append(candidate)
+
+            if _tile_distance(tile, cx, cy) <= 6 and same_height >= 1:
+                path_tiles.append(dict(tile))
+
+    for items in (clean_edges, flat_dry, moist_tiles, path_tiles):
+        items.sort(key=lambda t: (_tile_distance(t, cx, cy), t["y"], t["x"]))
+
+    if next_spec == "WaterPump":
+        candidates = clean_edges[:6]
+    elif next_spec == "EfficientFarmhouse":
+        candidates = moist_tiles[:6] or flat_dry[:6]
+    elif next_spec == "Path":
+        candidates = path_tiles[:6] or flat_dry[:6]
+    else:
+        candidates = flat_dry[:6]
+
+    area_text = ", ".join(
+        "%s free_dry=%s occ=%s" % (name, value["free"], value["occupied"])
+        for name, value in sorted(areas.items())
+    )
+    center_text = (
+        _format_tile(center_tile) if center_tile is not None else "(x=%s,y=%s,z=?)" % (cx, cy)
+    )
+    map_size = map_data.get("map_size", {}) if isinstance(map_data, dict) else {}
+    lines = [
+        "MAP window origin=(x=%s,y=%s) size=%sx%s map_size=%s center=%s"
+        % (arrays["origin_x"], arrays["origin_y"], width, height, map_size, center_text),
+        "FREE/OCCUPIED by area: " + area_text,
+        "CLEAN WATER EDGES for WaterPump (free land adjacent to clean water, no badwater): "
+        + _format_tile_list(clean_edges),
+        "FLAT DRY LAND for tanks/lodges/storage near center: " + _format_tile_list(flat_dry),
+        "MOIST FARMABLE SOIL for farms/fields: " + _format_tile_list(moist_tiles),
+        "CANDIDATES for next %s: %s" % (next_spec, _format_tile_list(candidates)),
+    ]
+    return {"text": "COMPACT MAP:\n" + "\n".join(lines), "candidates": candidates}
+
+
+def kb_query_for_state(state, next_spec):
+    if not isinstance(state, dict):
+        return "starter base water food housing path planning"
+    alerts = []
+    for alert in state.get("alerts", []) or []:
+        if isinstance(alert, dict):
+            alerts.append(str(alert.get("message") or alert.get("id") or ""))
+        else:
+            alerts.append(str(alert))
+    weather = (state.get("weather", {}) or {})
+    nxt = weather.get("next", {}) or {}
+    resources = _resource_by_good(state)
+    water = resources.get("water", {})
+    food = resources.get("food", {}) or resources.get("berries", {}) or {}
+    return " ".join(
+        [
+            "current situation",
+            "next building %s" % next_spec,
+            "alerts %s" % " ".join(alerts[:4]),
+            "weather current %s next %s duration %s"
+            % (weather.get("current", ""), nxt.get("type", ""), nxt.get("duration_days", "")),
+            "water days %s food days %s"
+            % (water.get("days_remaining", ""), food.get("days_remaining", "")),
+            "placement pathing water pump tank lodge farm storage starter base",
+        ]
+    )
+
+
+def compact_kb_block(query, k=3):
+    if kb_lookup is None:
+        return "KB: <unavailable: agent/kb.py could not be imported>"
+    try:
+        chunks = kb_lookup(query, k=k)
+    except Exception as e:
+        return "KB: <lookup failed: %s>" % e
+    if not chunks:
+        return "KB: <no relevant chunks>"
+
+    lines = ["KB RULES for query: %s" % query[:220]]
+    for index, chunk in enumerate(chunks[:k], start=1):
+        title = chunk.get("heading_path") or chunk.get("title") or chunk.get("source")
+        text = str(chunk.get("text", "")).strip().replace("\r\n", "\n")
+        if len(text) > 900:
+            text = text[:897].rstrip() + "..."
+        lines.append("%d. %s [%s]\n%s" % (index, title, chunk.get("source", "?"), text))
+    return "\n".join(lines)
 
 
 def state_summary_for_journal(state):
@@ -570,11 +939,35 @@ def run(cfg, run_id, max_steps):
                 continue
 
             state_block = compact_state(state)
+            next_spec = infer_next_building_type(state)
+
+            mstatus, map_data = bridge.map()
+            if mstatus == 200:
+                map_info = compact_map_summary(map_data, state, next_spec)
+                map_block = map_info["text"]
+            else:
+                map_info = {"text": "MAP: <unavailable status=%s>" % mstatus, "candidates": []}
+                map_block = map_info["text"]
+                log_stderr("step %d: /map unavailable (status=%s); continuing" % (step, mstatus))
+
+            kb_query = kb_query_for_state(state, next_spec)
+            kb_block = compact_kb_block(kb_query, k=3)
 
             # --- 2. Compose user message & call the LLM --------------------
-            user_msg = {"role": "user", "content": state_block +
-                        "\n\nChoose the single most urgent action now. Return ONLY "
-                        "the JSON object matching the schema."}
+            user_msg = {
+                "role": "user",
+                "content": (
+                    state_block
+                    + "\n\n"
+                    + map_block
+                    + "\n\n"
+                    + kb_block
+                    + "\n\nNEXT_BUILDING_HINT=%s" % next_spec
+                    + "\nUse map candidates when placing. Connect placed buildings to "
+                    "the district center with Path. Choose the single most urgent "
+                    "action now. Return ONLY the JSON object matching the schema."
+                ),
+            }
             messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-HISTORY_LIMIT:] + [user_msg]
 
             try:
@@ -660,6 +1053,12 @@ def run(cfg, run_id, max_steps):
                     "step": step,
                     "event": "step",
                     "state": state_summary_for_journal(state),
+                    "map": {
+                        "http_status": mstatus,
+                        "summary": map_block,
+                        "candidate_count": len(map_info.get("candidates", [])),
+                    },
+                    "kb_query": kb_query,
                     "action": {
                         "name": action,
                         "args": args,
