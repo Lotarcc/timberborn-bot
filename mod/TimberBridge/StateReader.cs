@@ -63,7 +63,100 @@ namespace TimberBridge {
         district_center = ReadDistrictCenter(),
         weather = ReadWeather()
       };
+      dto.alerts = ComputeAlerts(dto);
       return JsonConvert.SerializeObject(dto);
+    }
+
+    // ------------------------------------------------------------------
+    // Deterministic triage. Every survival rule the agent must not miss is
+    // enforced HERE, as data — not left to the LLM prompt. The agent's planner
+    // sorts by these; the LLM only chooses how to fix them.
+    // ------------------------------------------------------------------
+    private List<AlertDto> ComputeAlerts(StateDto s) {
+      var alerts = new List<AlertDto>();
+      Dictionary<string, int> counts = s.buildings != null ? s.buildings.counts : null;
+
+      bool hasPump = HasBuilding(counts, "WaterPump") || HasBuilding(counts, "DeepWaterPump")
+                     || HasBuilding(counts, "LargeWaterPump");
+      bool hasLumberjack = HasBuilding(counts, "LumberjackFlag");
+      bool hasFood = HasBuilding(counts, "GathererFlag") || HasBuilding(counts, "EfficientFarmHouse")
+                     || HasBuilding(counts, "EfficientFarmhouse") || HasBuilding(counts, "Farmhouse")
+                     || HasBuilding(counts, "FarmHouse");
+
+      // How many days of supply the colony must hold to be safe: while temperate,
+      // the whole next hazard + 2 days of margin; while inside a hazard, what's
+      // left of it + 1. Weather read failure falls back to a 5-day cushion.
+      float neededDays = 5f;
+      if (s.weather != null) {
+        neededDays = s.weather.current == "temperate" && s.weather.next != null
+            ? (s.weather.next.duration_days > 0 ? s.weather.next.duration_days : 3) + 2f
+            : s.weather.current_ends_in_days + 1f;
+      }
+
+      GoodDto water = FindGood(s.resources, "Water");
+      GoodDto log = FindGood(s.resources, "Log") ?? FindGood(s.resources, "Logs");
+
+      if (!hasLumberjack) {
+        alerts.Add(A("no_log_production", "critical",
+                     "No LumberjackFlag: nothing can be built without logs.",
+                     "Place a LumberjackFlag (FREE) next to wild trees, path-connected."));
+      }
+      if (!hasPump) {
+        alerts.Add(A("no_water_pump", "critical",
+                     "No water pump: beavers have no drinking water source.",
+                     "Place a WaterPump (12 logs) on land adjacent to clean water."));
+      } else if (water != null && water.days_remaining >= 0f && water.days_remaining < neededDays) {
+        alerts.Add(A("water_understocked", "critical",
+                     "Water covers " + water.days_remaining.ToString("0.0") + "d, need "
+                     + neededDays.ToString("0.0") + "d for the coming hazard.",
+                     "Add SmallTanks and advance time to fill them BEFORE the hazard."));
+      }
+      if (!hasFood) {
+        alerts.Add(A("no_food_production", "warn",
+                     "No food production (gatherer/farm).",
+                     "Place a GathererFlag (FREE) near berry bushes; farm on moist soil."));
+      }
+      if (s.population != null && s.population.homeless > 0) {
+        alerts.Add(A("homeless", "warn",
+                     s.population.homeless + " beavers homeless (bad sleep; Folktails stop breeding).",
+                     "Build Lodges (12 logs, 3 beds) near workplaces."));
+      }
+      if (log != null && log.stored <= 0 && s.buildings != null && s.buildings.under_construction > 0) {
+        alerts.Add(A("logs_zero_sites_waiting", "critical",
+                     s.buildings.under_construction + " construction site(s) waiting but 0 logs in stock.",
+                     "Ensure LumberjackFlag is working near trees, then advance time (set_speed)."));
+      }
+      if (s.buildings != null && s.buildings.under_construction > 0
+          && (log == null || log.stored > 0)) {
+        alerts.Add(A("sites_in_progress", "info",
+                     s.buildings.under_construction + " site(s) under construction.",
+                     "Advance time (set_speed 3-5) so builders can finish before placing more."));
+      }
+      return alerts;
+    }
+
+    private static AlertDto A(string id, string severity, string message, string suggestion) {
+      return new AlertDto { id = id, severity = severity, message = message, suggestion = suggestion };
+    }
+
+    // Building ids are faction-suffixed ("WaterPump.Folktails") — match the bare prefix.
+    private static bool HasBuilding(Dictionary<string, int> counts, string bareId) {
+      if (counts == null) return false;
+      foreach (KeyValuePair<string, int> kv in counts) {
+        if (kv.Value <= 0) continue;
+        string name = kv.Key;
+        if (string.Equals(name, bareId, StringComparison.OrdinalIgnoreCase)) return true;
+        if (name.StartsWith(bareId + ".", StringComparison.OrdinalIgnoreCase)) return true;
+      }
+      return false;
+    }
+
+    private static GoodDto FindGood(List<GoodDto> goods, string id) {
+      if (goods == null) return null;
+      foreach (GoodDto g in goods) {
+        if (string.Equals(g.good, id, StringComparison.OrdinalIgnoreCase)) return g;
+      }
+      return null;
     }
 
     private PopulationDto ReadPopulation() {
@@ -179,6 +272,14 @@ namespace TimberBridge {
       public BuildingsDto buildings;
       public CoordDto district_center;
       public WeatherReader.WeatherDto weather;
+      public List<AlertDto> alerts;
+    }
+
+    private class AlertDto {
+      public string id;
+      public string severity; // critical | warn | info
+      public string message;
+      public string suggestion;
     }
 
     private class CoordDto {

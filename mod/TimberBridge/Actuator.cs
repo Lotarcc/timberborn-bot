@@ -72,6 +72,7 @@ namespace TimberBridge {
                                  GetBool(args, "instant", false));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
           case "save": return Save(GetStr(args, "name"));
+          case "batch": return Batch(args);
           default: return Err("not_implemented", command);
         }
       } catch (Exception e) {
@@ -128,6 +129,46 @@ namespace TimberBridge {
       if (obj == null || !obj.CanDelete()) return Err("not_deletable", "(" + x + "," + y + "," + z + ")");
       _entities.Delete(obj);
       return Ok(new { command = "demolish", x, y, z });
+    }
+
+    // Execute an ordered list of actions in one main-thread hop:
+    // {"command":"batch","args":{"actions":[{"command":..,"args":{..}},...],"stop_on_error":false}}
+    // Returns per-action results so the agent can commit a whole mini-plan per
+    // decision turn instead of paying one LLM round-trip per placement.
+    private string Batch(JObject args) {
+      JArray actions = args?["actions"] as JArray;
+      if (actions == null || actions.Count == 0) return Err("bad_args", "actions[] required");
+      if (actions.Count > 16) return Err("bad_args", "max 16 actions per batch");
+      bool stopOnError = args?["stop_on_error"] != null
+                         && args["stop_on_error"].Type != JTokenType.Null
+                         && args["stop_on_error"].ToObject<bool>();
+
+      var results = new List<JObject>();
+      bool allOk = true;
+      foreach (JToken t in actions) {
+        var item = t as JObject;
+        string cmd = item != null ? (string)item["command"] : null;
+        string res;
+        if (string.IsNullOrEmpty(cmd)) {
+          res = Err("bad_args", "each action needs a command");
+        } else if (cmd == "batch") {
+          res = Err("bad_args", "no nested batches");
+        } else {
+          res = Act(cmd, item["args"] as JObject);
+        }
+        JObject parsed = JObject.Parse(res);
+        parsed["command"] = cmd ?? "?";
+        results.Add(parsed);
+        bool ok = parsed["ok"] != null && parsed["ok"].ToObject<bool>();
+        if (!ok) {
+          allOk = false;
+          if (stopOnError) break;
+        }
+      }
+      return JsonConvert.SerializeObject(new {
+        ok = allOk, command = "batch", executed = results.Count,
+        total = actions.Count, results
+      });
     }
 
     private string Save(string name) {

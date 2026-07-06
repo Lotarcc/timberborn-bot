@@ -49,6 +49,10 @@ namespace TimberBridge {
 
     public void Load() {
       _gameVersion = ReadGameVersion();
+      // Keep Unity ticking when the game window loses focus — otherwise the
+      // main-thread queue never drains and every endpoint returns
+      // main_thread_timeout while the operator watches YouTube.
+      Application.runInBackground = true;
       // Drive the main-thread queue from a Unity component (reliable per-frame Update).
       _pumpGo = new GameObject("TimberBridgePump");
       var pump = _pumpGo.AddComponent<BridgePump>();
