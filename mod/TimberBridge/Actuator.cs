@@ -37,6 +37,7 @@ namespace TimberBridge {
     private readonly GameSaver _saver;
     private readonly GameLoader _loader;
     private readonly DistrictCenterRegistry _districts;
+    private readonly ReachabilityReader _reachability;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -47,7 +48,8 @@ namespace TimberBridge {
                     EntityService entities,
                     GameSaver saver,
                     GameLoader loader,
-                    DistrictCenterRegistry districts) {
+                    DistrictCenterRegistry districts,
+                    ReachabilityReader reachability) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -58,6 +60,7 @@ namespace TimberBridge {
       _saver = saver;
       _loader = loader;
       _districts = districts;
+      _reachability = reachability;
     }
 
     public string Act(string command, JObject args) {
@@ -73,7 +76,8 @@ namespace TimberBridge {
             return PlaceBuilding(GetStr(args, "spec") ?? GetStr(args, "spec_id")
                                    ?? GetStr(args, "building") ?? GetStr(args, "name"),
                                  GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
-                                 GetStr(args, "orientation"), GetBool(args, "instant", false));
+                                 GetStr(args, "orientation"), GetBool(args, "instant", false),
+                                 GetBool(args, "auto_connect", true));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
           case "set_priority":
             return SetPriority(GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
@@ -94,7 +98,7 @@ namespace TimberBridge {
       return Ok(new { command = "set_speed", speed });
     }
 
-    private string PlaceBuilding(string specId, int x, int y, int z, string orientation, bool instant) {
+    private string PlaceBuilding(string specId, int x, int y, int z, string orientation, bool instant, bool autoConnect) {
       if (string.IsNullOrEmpty(specId)) return Err("bad_args", "spec required");
       BlockObjectSpec spec = FindSpec(specId);
       if (spec == null) return Err("unknown_spec", specId);
@@ -126,7 +130,174 @@ namespace TimberBridge {
         if (instant) { _blockFactory.CreateFinished(spec, placement); mode = "finished"; }
         else { _blockFactory.CreateUnfinished(spec, placement); mode = "construction_site"; }
       }
-      return Ok(new { command = "place_building", spec = specId, x, y, z, orientation = o.ToString(), mode });
+
+      // A finished building is only staffed/reachable if it touches the district ROAD
+      // network. Lay a Path from the building back to that network. Never fail the
+      // placement if this can't connect (report reason so the agent can bridge/dam).
+      // Only meaningful for real buildings; a placed Path is its own connection.
+      object autoConnectResult = null;
+      if (autoConnect && spec.HasSpec<BuildingSpec>()) {
+        autoConnectResult = AutoConnect(coord, spec);
+      }
+
+      return Ok(new { command = "place_building", spec = specId, x, y, z,
+                      orientation = o.ToString(), mode, auto_connect = autoConnectResult });
+    }
+
+    // Number of Path construction sites AutoConnect will ever lay in one call. Hard cap
+    // so a runaway BFS (e.g. a very long route hugging a lake) can't carpet the map.
+    private const int MaxPathTiles = 20;
+    // BFS exploration cap: how many tiles we pop before giving up looking for a road.
+    private const int MaxBfsExpansion = 60;
+
+    // Lay a contiguous Path from a freshly placed building back to the district-road
+    // network so the FINISHED building is connected (staffed/reachable). Runs on the
+    // main thread (Act does). Wrapped end-to-end in try/catch: a paving failure must
+    // NEVER fail the building placement or throw out of Act.
+    //
+    // Returns an anonymous object folded into place_building's JSON under "auto_connect":
+    //   { connected:bool, paths_laid:int, path_tiles:[{x,y,z}], reason?:string }
+    private object AutoConnect(Vector3Int buildingCoord, BlockObjectSpec buildingSpec) {
+      try {
+        BlockObjectSpec pathSpec = FindSpec("Path");
+        if (pathSpec == null) {
+          return new { connected = false, paths_laid = 0, reason = "no_path_spec" };
+        }
+
+        // (a) Candidate start tiles: the orthogonal ring around the building footprint,
+        // at the building's z. If ANY is already on the district road, we're connected.
+        var startTiles = FootprintAdjacentTiles(buildingCoord, buildingSpec);
+        foreach (Vector3Int t in startTiles) {
+          if (_reachability.IsTileOnDistrictRoad(t)) {
+            return new { connected = true, paths_laid = 0, path_tiles = new object[0] };
+          }
+        }
+
+        // (b) BFS outward from the start tiles (4-neighbour, same z) for the nearest
+        // tile already on the district road. Track parents to rebuild the route.
+        var parent = new Dictionary<Vector3Int, Vector3Int>();
+        var visited = new HashSet<Vector3Int>();
+        var queue = new Queue<Vector3Int>();
+        Vector3Int roadTile = default(Vector3Int);
+        bool foundRoad = false;
+
+        foreach (Vector3Int t in startTiles) {
+          if (visited.Add(t)) queue.Enqueue(t);
+        }
+
+        int expanded = 0;
+        while (queue.Count > 0 && expanded < MaxBfsExpansion) {
+          Vector3Int cur = queue.Dequeue();
+          expanded++;
+
+          if (_reachability.IsTileOnDistrictRoad(cur)) {
+            roadTile = cur;
+            foundRoad = true;
+            break;
+          }
+
+          foreach (Vector3Int n in Orthogonal(cur)) {
+            if (!visited.Add(n)) continue;
+            // Walk a neighbour if we can route through it: it's already on the road,
+            // it already carries a path (traverse it, we just won't re-lay), or a fresh
+            // Path would validly place there.
+            if (!_reachability.IsTileOnDistrictRoad(n) && !HasPathAt(n) && !CanPave(pathSpec, n)) continue;
+            parent[n] = cur;
+            queue.Enqueue(n);
+          }
+        }
+
+        if (!foundRoad) {
+          // No land route to any district road within the cap (e.g. across a lake).
+          // Do NOT fail the building — just report so the agent knows to build a bridge/dam.
+          return new { connected = false, paths_laid = 0, reason = "no_land_route" };
+        }
+
+        // (c) Rebuild the route road<-...<-start, then lay Path on every tile from the
+        // building side UP TO (but not including) the road tile.
+        var route = new List<Vector3Int>();
+        Vector3Int walk = roadTile;
+        while (parent.TryGetValue(walk, out Vector3Int prev)) {
+          route.Add(walk);   // walk is a non-road tile here (roadTile has no parent unless it was a start tile)
+          walk = prev;
+        }
+        route.Add(walk); // the start tile
+        // route is road-adjacent .. start; drop the road tile itself if it slipped in.
+        route.RemoveAll(tile => _reachability.IsTileOnDistrictRoad(tile));
+
+        var laid = new List<object>();
+        foreach (Vector3Int tile in route) {
+          if (laid.Count >= MaxPathTiles) break;
+          if (HasPathAt(tile)) continue;                 // already a path here
+          if (!CanPave(pathSpec, tile)) continue;        // re-validate before creating
+          _blockFactory.CreateUnfinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+          laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
+        }
+
+        return new { connected = true, paths_laid = laid.Count, path_tiles = laid };
+      } catch (Exception e) {
+        Debug.LogError("[TimberBridge] auto_connect failed: " + e);
+        return new { connected = false, paths_laid = 0, reason = "exception" };
+      }
+    }
+
+    // Orthogonal ring of tiles around a building's footprint at the building's z. The
+    // footprint is approximated from the spec's unrotated block size (buildingCoord is
+    // the origin corner). Orientation is ignored — this only needs to be a reasonable
+    // set of seed tiles for the BFS; each actual Path placement is validated separately.
+    // On any uncertainty we fall back to the 4 orthogonal neighbours of buildingCoord.
+    private List<Vector3Int> FootprintAdjacentTiles(Vector3Int buildingCoord, BlockObjectSpec spec) {
+      var result = new List<Vector3Int>();
+      var footprint = new HashSet<Vector3Int>();
+      try {
+        Vector3Int size = spec.Size; // x,y horizontal; z vertical
+        int sx = Mathf.Max(1, size.x);
+        int sy = Mathf.Max(1, size.y);
+        for (int dx = 0; dx < sx; dx++) {
+          for (int dy = 0; dy < sy; dy++) {
+            footprint.Add(new Vector3Int(buildingCoord.x + dx, buildingCoord.y + dy, buildingCoord.z));
+          }
+        }
+      } catch {
+        footprint.Clear();
+      }
+      if (footprint.Count == 0) {
+        footprint.Add(buildingCoord);
+      }
+      // Orthogonal neighbours of the footprint that are not themselves in the footprint.
+      var seen = new HashSet<Vector3Int>();
+      foreach (Vector3Int f in footprint) {
+        foreach (Vector3Int n in Orthogonal(f)) {
+          if (footprint.Contains(n)) continue;
+          if (seen.Add(n)) result.Add(n);
+        }
+      }
+      return result;
+    }
+
+    private static IEnumerable<Vector3Int> Orthogonal(Vector3Int c) {
+      yield return new Vector3Int(c.x + 1, c.y, c.z);
+      yield return new Vector3Int(c.x - 1, c.y, c.z);
+      yield return new Vector3Int(c.x, c.y + 1, c.z);
+      yield return new Vector3Int(c.x, c.y - 1, c.z);
+    }
+
+    // Can a Path be placed here? Valid per BlockValidator (handles terrain/water/occupancy)
+    // and not already occupied by a non-path object we'd clash with.
+    private bool CanPave(BlockObjectSpec pathSpec, Vector3Int tile) {
+      if (HasPathAt(tile)) return false;
+      return _validator.BlocksValid(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+    }
+
+    // Is there already a path/road occupying this tile's Path slot? CONFIRMED: the game
+    // stores at most one object in the per-tile Path slot (paths, roads, path sites);
+    // IBlockService.GetPathObjectAt returns it or null. Robust and spec-name-free.
+    private bool HasPathAt(Vector3Int tile) {
+      try {
+        return _blocks.GetPathObjectAt(tile) != null;
+      } catch {
+        return false;
+      }
     }
 
     private string Demolish(int x, int y, int z) {

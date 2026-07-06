@@ -76,6 +76,42 @@ namespace TimberBridge {
       return _districtService.IsOnInstantDistrictRoadSpill(world);
     }
 
+    // TIGHT ROAD test (NOT the spill): is this grid tile ON the actual district-road
+    // network — i.e. a district-center road node or a placed Path connected to it?
+    // This is the network a FINISHED building must touch to be staffed/reachable; the
+    // road-spill test above is the wide builder radius and is WRONG for this purpose.
+    //
+    // CONFIRMED (decompile of Timberborn.GameDistricts.dll + Timberborn.Navigation.dll):
+    //   The game decides a finished building's DistrictBuilding.InstantDistrict via
+    //   DistrictBuilding.ShouldBeAssignedToInstantDistrict ->
+    //   DistrictCenter.AccessibleIsOnInstantDistrictRoad ->
+    //   IDistrictService.IsOnInstantDistrictRoad(District, Vector3) ->
+    //   InstantDistrictMap.RoadNodeIsOccupiedByDistrict(district, WorldToId(pos)).
+    //   RoadNodeIsOccupiedByDistrict consults _districtsOnRoads, the map of ROAD nodes
+    //   (DC road + placed Path) to owning district. It does NOT touch any road-SPILL
+    //   flow field. So this is exactly the tight road network the finished building
+    //   needs, and it mirrors the game's own InstantDistrict != null decision.
+    //
+    //   DistrictCenter exposes the same test publicly as
+    //   DistrictCenter.IsOnInstantDistrictRoad(Vector3 start) (delegates to the
+    //   IDistrictService overload against its own District). We iterate all finished
+    //   district centers and return true if the tile is on ANY of their road networks.
+    //
+    // COORD CHOICE (CONFIRMED): same as IsCellOnRoadSpill — WorldToId floors
+    //   GridToWorldCentered(tile), and NavigationCoordinateSystem.GridToWorld ==
+    //   CoordinateSystem.GridToWorldCentered, so the tile center is the faithful probe.
+    public bool IsTileOnDistrictRoad(Vector3Int tile) {
+      try {
+        Vector3 world = CoordinateSystem.GridToWorldCentered(tile);
+        foreach (DistrictCenter dc in _districtCenterRegistry.FinishedDistrictCenters) {
+          if (dc != null && dc.IsOnInstantDistrictRoad(world)) return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+
     // Game-truth for an EXISTING object. Buildings carry a DistrictBuilding whose
     // InstantDistrict != null is the same signal behind the in-game
     // "Unconnected"/"Unreachable" warning. Objects with NO DistrictBuilding (paths /
