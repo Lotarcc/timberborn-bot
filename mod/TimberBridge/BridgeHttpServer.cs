@@ -24,6 +24,7 @@ namespace TimberBridge {
     private Thread _thread;
     private volatile bool _running;
     private string _gameVersion = "unknown";
+    private GameObject _pumpGo;
 
     private readonly MainThreadDispatcher _dispatcher;
     private readonly StateReader _stateReader;
@@ -35,6 +36,9 @@ namespace TimberBridge {
 
     public void Load() {
       _gameVersion = ReadGameVersion();
+      // Drive the main-thread queue from a Unity component (reliable per-frame Update).
+      _pumpGo = new GameObject("TimberBridgePump");
+      _pumpGo.AddComponent<BridgePump>().Dispatcher = _dispatcher;
       try {
         _listener = new TcpListener(IPAddress.Loopback, Port);
         _listener.Start();
@@ -50,6 +54,10 @@ namespace TimberBridge {
     public void Unload() {
       _running = false;
       try { _listener?.Stop(); } catch { /* already torn down */ }
+      if (_pumpGo != null) {
+        UnityEngine.Object.Destroy(_pumpGo);
+        _pumpGo = null;
+      }
       Debug.Log("[TimberBridge] stopped");
     }
 

@@ -1,20 +1,20 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
-using Timberborn.SingletonSystem;
 using UnityEngine;
 
 namespace TimberBridge {
 
-  // Marshals work onto the Unity main thread. Game state may only be touched on
-  // the main thread, but the HTTP listener runs on a background thread — so the
-  // listener enqueues a read lambda here and awaits the result. Bound as a
-  // singleton; the engine calls UpdateSingleton() every frame (main thread).
-  public class MainThreadDispatcher : IUpdatableSingleton {
+  // Marshals reads onto the Unity main thread. Driven by a MonoBehaviour pump
+  // (BridgePump) whose Unity Update() runs every frame — NOT by IUpdatableSingleton,
+  // which depends on singleton-collection timing that proved unreliable (the
+  // dispatcher is instantiated lazily and can miss the one-time collection).
+  public class MainThreadDispatcher {
 
     private readonly ConcurrentQueue<Action> _queue = new ConcurrentQueue<Action>();
 
-    public void UpdateSingleton() {
+    // Called every frame on the Unity main thread by BridgePump.
+    public void Drain() {
       while (_queue.TryDequeue(out Action action)) {
         try {
           action();
@@ -24,8 +24,7 @@ namespace TimberBridge {
       }
     }
 
-    // Called from the listener thread. Returns a Task the caller waits on; the
-    // lambda runs on the main thread in the next UpdateSingleton().
+    // Called from the listener thread; returns a Task the caller waits on.
     public Task<T> EnqueueRead<T>(Func<T> read) {
       var tcs = new TaskCompletionSource<T>();
       _queue.Enqueue(() => {
@@ -36,6 +35,19 @@ namespace TimberBridge {
         }
       });
       return tcs.Task;
+    }
+
+  }
+
+  // A plain Unity component. Its Update() is invoked directly by Unity every
+  // frame (regardless of game pause or singleton wiring), so the dispatcher
+  // queue always drains. Created on a GameObject in BridgeHttpServer.Load().
+  public class BridgePump : MonoBehaviour {
+
+    public MainThreadDispatcher Dispatcher;
+
+    private void Update() {
+      Dispatcher?.Drain();
     }
 
   }
