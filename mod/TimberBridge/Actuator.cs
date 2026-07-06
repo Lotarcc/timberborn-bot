@@ -64,9 +64,12 @@ namespace TimberBridge {
           case "set_speed": return SetSpeed(GetFloat(args, "speed", 1f));
           case "pause": return SetSpeed(0f);
           case "place_building":
+            // Default to a real construction site: beavers haul materials and build
+            // it over time, consuming Logs/goods — the actual game loop. Pass
+            // instant=true only for debug/god-mode instant finish.
             return PlaceBuilding(GetStr(args, "spec") ?? GetStr(args, "spec_id"), GetCoord(args, "x"),
                                  GetCoord(args, "y"), GetCoord(args, "z"), GetStr(args, "orientation"),
-                                 GetBool(args, "instant", true));
+                                 GetBool(args, "instant", false));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
           case "save": return Save(GetStr(args, "name"));
           default: return Err("not_implemented", command);

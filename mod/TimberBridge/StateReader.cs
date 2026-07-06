@@ -112,10 +112,20 @@ namespace TimberBridge {
       return goodId == "Water" ? 2.13f : 0f;
     }
 
-    // Goods that must appear in /state even at zero stock/capacity (survival-critical).
-    // Water can be 0 with no tank yet, which is exactly when the agent must see it.
+    // Goods that must appear in /state even at zero stock/capacity. Water is
+    // survival-critical; Log/Plank are the build materials the agent needs to see
+    // to reason about construction (buildings are now real sites that consume them).
     private static bool IsCoreGood(string goodId) {
-      return goodId == "Water";
+      switch (goodId) {
+        case "Water":
+        case "Log":
+        case "Logs":
+        case "Plank":
+        case "Planks":
+          return true;
+        default:
+          return false;
+      }
     }
 
     private BuildingsDto ReadBuildings() {

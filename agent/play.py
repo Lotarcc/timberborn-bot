@@ -147,6 +147,21 @@ DECISION LOOP (each turn):
    set_speed to advance time and re-check.
 4. You will see the action result next turn; iterate.
 
+CONSTRUCTION IS REAL (this is the game loop — respect it):
+  - place_building creates a CONSTRUCTION SITE, not a finished building. Beavers
+    must HAUL materials (mostly Logs) to it and BUILD it over time. It does nothing
+    until built. Placing 20 sites at once does NOT build them — they just queue.
+  - Buildings COST resources (Logs, later Planks). You start with almost none. You
+    cannot build what you cannot pay for: watch the Logs stock in RESOURCES.
+  - So the real early loop is: place a FEW free/cheap things (Path, GathererFlag,
+    Lumberjack/Forester flags are free), then set_speed 3-5 to let beavers gather
+    Logs and build, then re-check and place the next thing you can now afford.
+  - Advancing TIME is a first-class action. If nothing is affordable or sites are
+    still under construction, call set_speed to let beavers work, then reassess.
+    Do not keep placing sites you can't pay for.
+  - Secure LOG PRODUCTION early (Lumberjack cuts existing trees; Forester replants)
+    or everything else stalls for lack of materials.
+
 COLONY LAYOUT (plan ahead - do NOT just react to the immediate gap):
   - Think a few steps ahead like a town plan: decide roughly where water
     infrastructure, housing, farms, storage, and later amenities will sit BEFORE
@@ -495,9 +510,11 @@ def infer_next_building_type(state):
         + _building_count(state, "MediumTank") * 10
         + _building_count(state, "LargeWaterTank") * 10
     )
-    resources = _resource_by_good(state)
-    water_days = _as_float((resources.get("water") or {}).get("days_remaining"), 999.0)
-    if tanks < max(required_tanks, 1) or water_days < _next_hazard_days(state) + 2.0:
+    # Gate on tank CAPACITY vs the target, not on water_days: while the game is
+    # paused (and before beavers finish building), tanks read empty, so a
+    # days-based gate would demand tanks forever. Enough tanks placed -> move on;
+    # filling them is a matter of advancing time, not building more.
+    if tanks < max(required_tanks, 1):
         return "SmallTank"
 
     pop = state.get("population", {}) or {}
