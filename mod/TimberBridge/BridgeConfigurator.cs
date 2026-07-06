@@ -17,6 +17,7 @@ namespace TimberBridge {
       Bind<Actuator>().AsSingleton();
       Bind<BlueprintsReader>().AsSingleton();
       Bind<MapReader>().AsSingleton();
+      Bind<ResourcesReader>().AsSingleton();
       Bind<ScreenshotReader>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
