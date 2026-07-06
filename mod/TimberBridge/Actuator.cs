@@ -121,6 +121,20 @@ namespace TimberBridge {
                    specId + " invalid at (" + x + "," + y + "," + z + "); no buildable tile found near the district center");
       }
 
+      // AUTO-ORIENT: when we're going to auto-connect a real building, pick the orientation
+      // whose access tile connects to the district road with the shortest contiguous route,
+      // so the agent never has to reason about facing. Only reorients among VALID placements
+      // and only when it strictly improves connectivity; otherwise keeps the requested one.
+      // (ChooseBestOrientation returns `o` unchanged on any uncertainty, so `placement` stays
+      // valid.) The requested orientation is respected on ties.
+      if (autoConnect && spec.HasSpec<BuildingSpec>()) {
+        Orientation best = ChooseBestOrientation(spec, coord, o);
+        if (best != o) {
+          o = best;
+          placement = new Placement(coord, o, FlipMode.Unflipped);
+        }
+      }
+
       string mode;
       if (spec.HasSpec<BuildingSpec>()) {
         BuildingSpec buildingSpec = spec.GetSpec<BuildingSpec>();
@@ -205,66 +219,18 @@ namespace TimberBridge {
           }
         }
 
-        // (b) Single-source BFS (4-neighbour, same z) from the access tile(s) to the nearest
-        // tile already on the district road. Every visited tile records the parent it was
-        // reached from, so the road tile's parent chain is ONE contiguous path back to an
-        // access tile. Footprint tiles are excluded as obstacles (access-tile mode).
-        var parent = new Dictionary<Vector3Int, Vector3Int>();
-        var visited = new HashSet<Vector3Int>();
-        var queue = new Queue<Vector3Int>();
-        Vector3Int roadTile = default(Vector3Int);
-        bool foundRoad = false;
+        // (b+c) Single contiguous route from an access tile onto the district road, routing
+        // AROUND the footprint. This is the SAME computation the pre-placement orientation
+        // scorer runs in dry-run mode — here we compute it for real and pave it.
+        List<Vector3Int> route = ComputeContiguousRoute(pathSpec, startTiles, footprint, haveAccess);
 
-        // Seeds map to themselves; the reconstruction stops when parent==self, so the route
-        // always includes the access tile it started from.
-        foreach (Vector3Int t in startTiles) {
-          if (haveAccess && footprint.Contains(t)) continue; // never start inside the building
-          if (visited.Add(t)) { parent[t] = t; queue.Enqueue(t); }
-        }
-
-        int expanded = 0;
-        while (queue.Count > 0 && expanded < MaxBfsExpansion) {
-          Vector3Int cur = queue.Dequeue();
-          expanded++;
-
-          if (_reachability.IsTileOnDistrictRoad(cur)) {
-            roadTile = cur;
-            foundRoad = true;
-            break;
-          }
-
-          foreach (Vector3Int n in Orthogonal(cur)) {
-            if (!visited.Add(n)) continue;
-            if (haveAccess && footprint.Contains(n)) continue; // route AROUND the building
-            // Walk a neighbour if we can route through it: it's already on the road,
-            // it already carries a path (traverse it, we just won't re-lay), or a fresh
-            // Path would validly place there.
-            if (!_reachability.IsTileOnDistrictRoad(n) && !HasPathAt(n) && !CanPave(pathSpec, n)) continue;
-            parent[n] = cur;
-            queue.Enqueue(n);
-          }
-        }
-
-        if (!foundRoad) {
+        if (route == null) {
           // No land route to any district road within the cap (e.g. across a lake).
           // Do NOT fail the building — just report so the agent knows to build a bridge/dam.
           return new { connected = false, paths_laid = 0, reason = "no_land_route",
                        access_tiles = CoordList(accessTiles) };
         }
 
-        // (c) Reconstruct the single contiguous route road<-...<-accessTile by walking the
-        // parent chain. Because BFS assigns each tile exactly one parent along the edges it
-        // was discovered through, this chain is guaranteed connected (each step is a 4-
-        // neighbour of the next) — it cannot produce disjoint segments. The seed maps to
-        // itself, terminating the walk at the access tile.
-        var route = new List<Vector3Int>();
-        Vector3Int walk = roadTile;
-        while (true) {
-          route.Add(walk);
-          Vector3Int prev;
-          if (!parent.TryGetValue(walk, out prev) || prev.Equals(walk)) break;
-          walk = prev;
-        }
         // route is [road, .., accessTile]. Pave EVERY tile that isn't already on the road:
         // the access tile plus all intermediate tiles, forming one connected chain onto the
         // road. Tiles already on the road (the road end) are skipped — they're the target.
@@ -284,6 +250,138 @@ namespace TimberBridge {
         Debug.LogError("[TimberBridge] auto_connect failed: " + e);
         return new { connected = false, paths_laid = 0, reason = "exception" };
       }
+    }
+
+    // Single contiguous route from a start (access) tile onto the nearest district-road
+    // tile, routing AROUND the footprint obstacles. Returns the route as [road, .., access]
+    // (road end included so callers can skip it), or null when no road is reachable within
+    // the BFS cap. LAYS NOTHING — this is the shared core used both to actually pave (in
+    // AutoConnect) and to DRY-RUN score orientations (in PlaceBuilding). Contiguity is
+    // guaranteed: each BFS parent edge is a 4-neighbour, so the reconstructed chain is
+    // connected end to end. Guarded — never throws (returns null on any error).
+    private List<Vector3Int> ComputeContiguousRoute(BlockObjectSpec pathSpec,
+                                                    List<Vector3Int> startTiles,
+                                                    HashSet<Vector3Int> footprint,
+                                                    bool useFootprintObstacles) {
+      try {
+        var parent = new Dictionary<Vector3Int, Vector3Int>();
+        var visited = new HashSet<Vector3Int>();
+        var queue = new Queue<Vector3Int>();
+        Vector3Int roadTile = default(Vector3Int);
+        bool foundRoad = false;
+
+        // Seeds map to themselves; reconstruction stops at parent==self, so the route always
+        // includes the access tile it started from.
+        foreach (Vector3Int t in startTiles) {
+          if (useFootprintObstacles && footprint.Contains(t)) continue; // never start inside the building
+          if (visited.Add(t)) { parent[t] = t; queue.Enqueue(t); }
+        }
+
+        int expanded = 0;
+        while (queue.Count > 0 && expanded < MaxBfsExpansion) {
+          Vector3Int cur = queue.Dequeue();
+          expanded++;
+
+          if (_reachability.IsTileOnDistrictRoad(cur)) {
+            roadTile = cur;
+            foundRoad = true;
+            break;
+          }
+
+          foreach (Vector3Int n in Orthogonal(cur)) {
+            if (!visited.Add(n)) continue;
+            if (useFootprintObstacles && footprint.Contains(n)) continue; // route AROUND the building
+            // Walk a neighbour if we can route through it: it's already on the road,
+            // it already carries a path (traverse it, we just won't re-lay), or a fresh
+            // Path would validly place there.
+            if (!_reachability.IsTileOnDistrictRoad(n) && !HasPathAt(n) && !CanPave(pathSpec, n)) continue;
+            parent[n] = cur;
+            queue.Enqueue(n);
+          }
+        }
+
+        if (!foundRoad) return null;
+
+        var route = new List<Vector3Int>();
+        Vector3Int walk = roadTile;
+        while (true) {
+          route.Add(walk);
+          Vector3Int prev;
+          if (!parent.TryGetValue(walk, out prev) || prev.Equals(walk)) break;
+          walk = prev;
+        }
+        return route;
+      } catch {
+        return null;
+      }
+    }
+
+    // AUTO-ORIENT: choose the placement orientation whose ACCESS tile connects to the
+    // district road with the SHORTEST contiguous route, so the agent never has to reason
+    // about which way a building faces. A building's access tile is orientation-dependent
+    // (access = coord + Orientation.Transform(Entrance.Coordinates), CONFIRMED via decompile:
+    // PositionedEntrance.Coordinates = Blocks.Transform(Entrance.Coordinates, placement),
+    // and GridToWorldCentered->WorldToGridInt round-trips an integer tile). When access faces
+    // AWAY from the road the wrap-around BFS can dead-end (no_land_route); the toward-road
+    // orientation connects cleanly.
+    //
+    // Only applies to buildings with an entrance (the ones that carry BuildingAccessible;
+    // Awake throws otherwise). Scores each of the 4 orientations that is a VALID placement by
+    // the dry-run route length (0 if the access tile is already on the road; +inf if no route).
+    // Prefers the agent's requested orientation on ties. Returns the requested orientation
+    // unchanged when nothing scores better (or on any uncertainty) — never worse than before.
+    private Orientation ChooseBestOrientation(BlockObjectSpec spec, Vector3Int coord, Orientation requested) {
+      try {
+        // Only entrance-bearing buildings have an orientation-dependent access tile.
+        if (!spec.Entrance.HasEntrance) return requested;
+        BlockObjectSpec pathSpec = FindSpec("Path");
+        if (pathSpec == null) return requested;
+
+        Orientation[] candidates = { Orientation.Cw0, Orientation.Cw90, Orientation.Cw180, Orientation.Cw270 };
+        Orientation best = requested;
+        int bestScore = int.MaxValue;
+        bool haveBest = false;
+
+        foreach (Orientation o in candidates) {
+          // Must be a valid placement in this orientation, else skip.
+          if (!_validator.BlocksValid(spec, new Placement(coord, o, FlipMode.Unflipped))) continue;
+
+          Vector3Int access = AnalyticAccessTile(spec, coord, o);
+          var footprint = FootprintTiles(coord, spec); // orientation-agnostic bounding box (safe superset)
+          int score;
+          if (_reachability.IsTileOnDistrictRoad(access)) {
+            score = 0; // already on the road — perfect
+          } else {
+            var route = ComputeContiguousRoute(pathSpec,
+                                                new List<Vector3Int> { access },
+                                                footprint, useFootprintObstacles: true);
+            score = route == null ? int.MaxValue : route.Count; // shorter route == better
+          }
+
+          // Strictly-better wins; on a tie, prefer the agent's requested orientation.
+          bool better = !haveBest || score < bestScore
+                        || (score == bestScore && o == requested);
+          if (better) { best = o; bestScore = score; haveBest = true; }
+        }
+
+        // If nothing connects (all +inf) keep the requested orientation — AutoConnect will
+        // report no_land_route honestly rather than silently reorienting to no benefit.
+        if (!haveBest || bestScore == int.MaxValue) return requested;
+        return best;
+      } catch {
+        return requested;
+      }
+    }
+
+    // The access grid tile for a placement WITHOUT creating the entity, replicating the
+    // game's transform: access = coord + Orientation.Transform(Entrance.Coordinates)
+    // (FlipMode.Unflipped is identity). Matches BuildingAccessible.CalculateAccess() for the
+    // common (non-ForceOneFinalAccess) case; the real post-placement AccessTiles remains the
+    // ground truth used for the actual paving, so a ForceOneFinalAccess building still paves
+    // correctly — this only steers orientation selection.
+    private static Vector3Int AnalyticAccessTile(BlockObjectSpec spec, Vector3Int coord, Orientation o) {
+      Vector3Int local = spec.Entrance.Coordinates;
+      return coord + o.Transform(local);
     }
 
     // Find the just-placed building's BlockObject at `coord` and read its game access
