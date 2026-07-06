@@ -51,15 +51,29 @@ Coexistence in 16 GB with `num_parallel=1` + q8 KV: planner ~11–12 GB (weights
 
 **Reliability layer:** Ollama's schema-constrained decoding (`format` = JSON schema) forces every action to be valid JSON matching the `act` command enum — the planner physically cannot emit a malformed command. This is what makes even mid-size local models dependable in the loop.
 
-## Candidates & benchmark status
-Installed/pulling: `llama3.1:8b` (have), `qwen2.5-coder:14b` (have), `qwen2.5:7b`, `mistral-nemo:12b` (128k-capable), `qwen2.5:14b`, `qwen2.5:3b`, `bge-m3`, `nomic-embed-text` (have).
+## Final benchmark (2026-07-06, after the fix)
+All at `num_ctx=32768`, `NUM_PARALLEL=1` + flash attention + q8 KV. gen tok/s measured server-side (nanosecond timers, SSH-latency-immune).
 
-Preliminary (default config, **pre-fix** — not final):
-| Model | max ctx | gen tok/s | prompt tok/s | note |
-|---|---|---|---|---|
-| `llama3.1:8b` | 131k | **56** | 9776 | 100% GPU at 8k |
-| `qwen2.5-coder:14b` | 32k | 4 | 2527 | CPU-offloaded by NUM_PARALLEL=4 |
+| model @ 32k | gen tok/s | prompt tok/s | VRAM | on GPU | native JSON |
+|---|---|---|---|---|---|
+| `qwen2.5:14b` | 18.1 | 3723 | 14.6 GB | 96% | slightly malformed |
+| `mistral-nemo:12b` | **39.5** | 9858 | 11.6 GB | **100%** | clean |
+| `qwen2.5:7b` | 59.7 | 13875 | 7.3 GB | 100% | clean |
+| `llama3.1:8b` | 58.7 | 13209 | 9.0 GB | 100% | clean |
 
-Final matrix (after server reconfig) benchmarks every candidate at 16k & 32k for gen tok/s, GPU residency, and JSON-schema adherence, then picks the planner (+ fast fallback for the tiered loop). Expectation: `qwen2.5:14b` becomes viable on-GPU within the 30–60 s budget; `qwen2.5:7b`/`llama3.1:8b` remain the fast fallback.
+The fix moved a 14B from 4 → 18 tok/s, but at 32k it sits at 14.6 GB (96% GPU) — no room for the embedder + reflex to stay resident, and its raw JSON was slightly off.
+
+## Decision (roles)
+| Role | Model | Why |
+|---|---|---|
+| **Planner (default)** | `mistral-nemo:12b` | 39.5 tok/s, 100% on-GPU at 32k, clean JSON, 4.4 GB headroom keeps the ensemble hot |
+| **Escalation + offline coach** | `qwen2.5:14b` | smartest; used for hard/novel decisions and between-run retrospectives where 18 tok/s / VRAM pressure don't matter |
+| **Reflex / router** | `qwen2.5:3b` | routine ticks in ~1 s |
+| **Embedder** | `bge-m3` (primary), `nomic-embed-text` (light fallback) | retrieval quality drives "recall the right lesson" |
+
+All action outputs use Ollama schema-constrained decoding (`format`), so even the mid-size planner can't emit an invalid command. Fast fallback if headroom is ever needed: `qwen2.5:7b`.
+
+## Server ops (how Ollama is run on the box)
+Config persisted via `setx` (`OLLAMA_NUM_PARALLEL=1`, `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_KEEP_ALIVE=30m`). The tray app won't launch into the interactive desktop over SSH; restart the server detached with `Win32_Process.Create("cmd /c \"set OLLAMA_*=...&& ollama.exe serve\"")` (survives the SSH session, runs headless in session 0, GPU compute unaffected). For permanent unattended use, promote to a scheduled task / service.
 
 Sources: [Ollama KV cache quantization](https://smcleod.net/2024/12/bringing-k/v-context-quantisation-to-ollama/), [local LLM tool-calling eval 2026](https://www.jdhodges.com/blog/local-llms-on-tool-calling-2026-pt1-local-lm/).
