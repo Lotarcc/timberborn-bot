@@ -1,0 +1,8 @@
+{
+  "Name": "TimberBridge",
+  "Version": "0.1.0.0",
+  "Id": "Lotarcc.TimberBridge",
+  "MinimumGameVersion": "1.0.0.0",
+  "Description": "Localhost HTTP/JSON bridge exposing observe/act control of Timberborn for an AI agent. Phase 0: /ping liveness.",
+  "RequiredMods": []
+}
