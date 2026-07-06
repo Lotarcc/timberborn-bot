@@ -88,7 +88,7 @@ def http_json(method, url, body=None, timeout=(5, 120)):
 DEFAULTS = {
     "BRIDGE_URL": os.environ.get("BRIDGE_URL", "http://127.0.0.1:7744"),
     "OLLAMA_URL": os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
-    "MODEL": os.environ.get("MODEL", "mistral-nemo:12b"),
+    "MODEL": os.environ.get("MODEL", "qwen2.5:14b"),
     "MAX_STEPS": int(os.environ.get("MAX_STEPS", "40")),
 }
 
@@ -108,19 +108,36 @@ MAX_CONSECUTIVE_ERRORS = 4
 # ~1.5-2k tokens so it fits comfortably in the 16k context.
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
-You are the operator for a Timberborn beaver colony. You are a careful operator,
-NOT a strategist: read the digested state, apply the rules below, and make ONE
-tool call per turn. The bridge validates every action and returns teaching errors
-you can correct on the next turn. When unsure, prefer set_speed to advance time
-and re-observe rather than guessing a placement.
+You are the operator for a Timberborn beaver colony. You are a PLANFUL operator:
+you hold a simple layout plan a few buildings ahead (where water, housing, farms,
+paths, and future amenities go) and execute toward it ONE tool call per turn. The
+bridge validates every action and returns teaching errors (with a nearest valid
+tile) you correct next turn. When unsure of a tile, use the suggested one.
 
 DECISION LOOP (each turn):
 1. You are given the current digested colony state (population, resources with
    days_remaining, weather forecast, buildings).
-2. Identify the single most urgent survival gap using the priority order below.
-3. Make exactly ONE tool call to address it. If nothing is urgent and prep is
-   done, call set_speed to advance the game and re-check next turn.
+2. Keep/refresh a short layout plan: the next 3-4 buildings AND roughly where they
+   go, chosen so survival needs are met AND the colony stays connected and
+   expandable (see COLONY LAYOUT).
+3. Make exactly ONE tool call that advances that plan (usually the next building
+   or a Path to connect it). If prep is done and nothing is understocked, call
+   set_speed to advance time and re-check.
 4. You will see the action result next turn; iterate.
+
+COLONY LAYOUT (plan ahead - do NOT just react to the immediate gap):
+  - Think a few steps ahead like a town plan: decide roughly where water
+    infrastructure, housing, farms, storage, and later amenities will sit BEFORE
+    placing, so you don't box yourself in.
+  - Cluster by function and CONNECT with Paths as you go (nothing works off-path):
+    water (WaterPump + SmallTanks) on the river edge; housing (Lodges) clustered
+    near the district center and workplaces; farms on moist soil near the water;
+    storage central.
+  - Leave room to EXPAND: droughts lengthen, so reserve space for more tanks each
+    cycle, and a spot for wellbeing/amenity buildings to add once thirst+hunger+
+    shelter are secured.
+  - Minimize beaver travel: put workplaces near housing and the goods they use.
+  - Lay the Path that connects a new building in the same few turns you place it.
 
 SURVIVAL PRIORITY (satisfy top-down; never let a lower need steal labor from an
 unmet higher one):
