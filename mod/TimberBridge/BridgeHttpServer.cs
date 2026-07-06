@@ -31,13 +31,15 @@ namespace TimberBridge {
     private readonly StateReader _stateReader;
     private readonly Actuator _actuator;
     private readonly BlueprintsReader _blueprints;
+    private readonly MapReader _map;
 
     public BridgeHttpServer(MainThreadDispatcher dispatcher, StateReader stateReader,
-                            Actuator actuator, BlueprintsReader blueprints) {
+                            Actuator actuator, BlueprintsReader blueprints, MapReader map) {
       _dispatcher = dispatcher;
       _stateReader = stateReader;
       _actuator = actuator;
       _blueprints = blueprints;
+      _map = map;
     }
 
     public void Load() {
@@ -140,6 +142,16 @@ namespace TimberBridge {
           statusText = "Internal Server Error";
           json = "{\"ok\":false,\"error\":\"read_failed\"}";
           Debug.LogError("[TimberBridge] /state error: " + e);
+        }
+      } else if (path == "/map") {
+        try {
+          Task<string> read = _dispatcher.EnqueueRead(() => _map.ReadJson());
+          if (read.Wait(4000)) { status = 200; statusText = "OK"; json = read.Result; }
+          else { status = 503; statusText = "Service Unavailable"; json = "{\"ok\":false,\"error\":\"main_thread_timeout\"}"; }
+        } catch (Exception e) {
+          status = 500; statusText = "Internal Server Error";
+          json = "{\"ok\":false,\"error\":\"read_failed\"}";
+          Debug.LogError("[TimberBridge] /map error: " + e);
         }
       } else if (path == "/blueprints") {
         try {

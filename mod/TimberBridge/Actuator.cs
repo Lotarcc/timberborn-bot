@@ -64,8 +64,9 @@ namespace TimberBridge {
           case "set_speed": return SetSpeed(GetFloat(args, "speed", 1f));
           case "pause": return SetSpeed(0f);
           case "place_building":
-            return PlaceBuilding(GetStr(args, "spec"), GetInt(args, "x"), GetInt(args, "y"),
-                                 GetInt(args, "z"), GetStr(args, "orientation"), GetBool(args, "instant", true));
+            return PlaceBuilding(GetStr(args, "spec") ?? GetStr(args, "spec_id"), GetCoord(args, "x"),
+                                 GetCoord(args, "y"), GetCoord(args, "z"), GetStr(args, "orientation"),
+                                 GetBool(args, "instant", true));
           case "demolish": return Demolish(GetInt(args, "x"), GetInt(args, "y"), GetInt(args, "z"));
           case "save": return Save(GetStr(args, "name"));
           default: return Err("not_implemented", command);
@@ -200,10 +201,18 @@ namespace TimberBridge {
     }
 
     // --- arg + result helpers ---
-    private static string GetStr(JObject a, string k) { JToken t = a?[k]; return t?.ToString(); }
-    private static int GetInt(JObject a, string k) { JToken t = a?[k]; return t != null ? t.ToObject<int>() : 0; }
-    private static float GetFloat(JObject a, string k, float d) { JToken t = a?[k]; return t != null ? t.ToObject<float>() : d; }
-    private static bool GetBool(JObject a, string k, bool d) { JToken t = a?[k]; return t != null ? t.ToObject<bool>() : d; }
+    private static bool Present(JToken t) { return t != null && t.Type != JTokenType.Null; }
+    private static string GetStr(JObject a, string k) { JToken t = a?[k]; return Present(t) ? t.ToString() : null; }
+    private static int GetInt(JObject a, string k) { JToken t = a?[k]; return Present(t) ? t.ToObject<int>() : 0; }
+    private static float GetFloat(JObject a, string k, float d) { JToken t = a?[k]; return Present(t) ? t.ToObject<float>() : d; }
+    private static bool GetBool(JObject a, string k, bool d) { JToken t = a?[k]; return Present(t) ? t.ToObject<bool>() : d; }
+
+    // Coordinate from flat args[k] or nested args.position[k] (models nest either way).
+    private static int GetCoord(JObject a, string k) {
+      JToken t = a?[k];
+      if (!Present(t)) { JObject pos = a?["position"] as JObject; t = pos?[k]; }
+      return Present(t) ? t.ToObject<int>() : 0;
+    }
 
     private static string Ok(object applied) {
       return JsonConvert.SerializeObject(new { ok = true, applied });

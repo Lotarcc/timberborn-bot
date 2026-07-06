@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
 play.py — first-version agent loop that plays Timberborn through the TimberBridge
-HTTP API using a local LLM (Ollama running mistral-nemo:12b via function calling).
+HTTP API using a local LLM (Ollama with schema-constrained JSON output).
 
 Architecture (see docs/agent/agent-design.md, docs/api-contract.md):
   - TimberBridge exposes the live game over localhost HTTP: GET /ping, GET /state
     (a *digested* colony snapshot — the bridge does the survival math), POST /act
     (one validated command; returns teaching errors on failure).
   - The LLM is the cheap "operator": every step it reads the digested state, picks
-    ONE tool call, we forward it to the bridge, feed the result back, and advance.
+    ONE JSON action, we forward it to the bridge, feed the result back, and advance.
   - We keep the game paused between decisions (set_speed 0) so every read is a
     consistent snapshot and there is no wall-clock pressure on the model.
 
 Design bias for this first version: robustness over cleverness. Everything degrades
-gracefully — missing bridge, missing Ollama, malformed tool calls, unimplemented
+gracefully — missing bridge, missing Ollama, malformed JSON actions, unimplemented
 commands — and every step is logged to a JSONL run-journal for later retrospective.
 
 Runtime deps: Python 3.8+ stdlib. Uses `requests` if importable, else falls back to
@@ -26,6 +26,8 @@ import os
 import sys
 import time
 import traceback
+import urllib.error
+import urllib.request
 
 # ---------------------------------------------------------------------------
 # HTTP shim: prefer requests, fall back to urllib so the script has zero hard deps.
@@ -37,8 +39,6 @@ try:
     _HAVE_REQUESTS = True
 except Exception:  # pragma: no cover - environment dependent
     _HAVE_REQUESTS = False
-    import urllib.error
-    import urllib.request
 
 
 def http_json(method, url, body=None, timeout=(5, 120)):
@@ -110,7 +110,7 @@ MAX_CONSECUTIVE_ERRORS = 4
 SYSTEM_PROMPT = """\
 You are the operator for a Timberborn beaver colony. You are a PLANFUL operator:
 you hold a simple layout plan a few buildings ahead (where water, housing, farms,
-paths, and future amenities go) and execute toward it ONE tool call per turn. The
+paths, and future amenities go) and execute toward it ONE JSON action per turn. The
 bridge validates every action and returns teaching errors (with a nearest valid
 tile) you correct next turn. When unsure of a tile, use the suggested one.
 
@@ -120,7 +120,7 @@ DECISION LOOP (each turn):
 2. Keep/refresh a short layout plan: the next 3-4 buildings AND roughly where they
    go, chosen so survival needs are met AND the colony stays connected and
    expandable (see COLONY LAYOUT).
-3. Make exactly ONE tool call that advances that plan (usually the next building
+3. Make exactly ONE JSON action that advances that plan (usually the next building
    or a Path to connect it). If prep is done and nothing is understocked, call
    set_speed to advance time and re-check.
 4. You will see the action result next turn; iterate.
@@ -198,133 +198,42 @@ COORDINATES (important):
   - Spec ids are simple names (WaterPump, SmallTank, Lodge, Path, ...) — no faction
     suffix needed.
 
-TOOL USE:
-  - Make exactly ONE tool call per turn — do not narrate a plan without acting.
+OUTPUT:
+  - Output ONLY one JSON object: {"reasoning": string, "action": string, "args": object}.
+  - Make exactly ONE action per turn — do not narrate a plan without acting.
   - If a command returns "not_implemented", pick a different action; that command
     is not live yet in this bridge build.
+  - If a command returns "invalid_placement" with suggestion.nearest_valid
+    {x,y,z,orientation}, reuse exactly that suggested x,y,z,orientation next turn.
 """
 
 
 # ---------------------------------------------------------------------------
-# Tool schema (Ollama / OpenAI-style function-calling format). Mirrors the
-# POST /act command enum from docs/api-contract.md. We include commands that
-# aren't live yet (place_building, save) so the model has the full surface; the
-# bridge returns a "not_implemented" error we handle gracefully.
-#
-# We expose /act commands as INDIVIDUAL tools (one per command) rather than a
-# single generic act(command, args): small models pick a named tool with a tight
-# arg schema far more reliably than they fill a free-form {command, args} blob.
+# Ollama structured-output schema. The model must choose one action object; the
+# bridge still validates command-specific args and returns teaching errors.
 # ---------------------------------------------------------------------------
-BUILDING_SPECS = [
-    "Path",
-    "WaterPump",
-    "SmallTank",
-    "MediumTank",
-    "MiniLodge",
-    "Lodge",
-    "GathererFlag",
-    "EfficientFarmHouse",
-    "SmallWarehouse",
-    "Forester",
-    "LumberjackFlag",
-    "Inventor",
-    "Dam",
-    "Levee",
-    "Floodgate",
-    "LumberjackFlag",
-    "Forester",
-]
-ORIENTATIONS = ["North", "East", "South", "West"]
+ACTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "reasoning": {"type": "string"},
+        "action": {
+            "type": "string",
+            "enum": ["set_speed", "place_building", "demolish", "save", "noop"],
+        },
+        "args": {"type": "object"},
+    },
+    "required": ["reasoning", "action", "args"],
+}
 
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "set_speed",
-            "description": (
-                "Set game speed. 0 = pause (default operating state). 1-10 advances "
-                "game time so the colony acts; use 2-4 to advance a bit after building, "
-                "then re-observe. Higher = faster/riskier."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "speed": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 10,
-                        "description": "0 pauses; 1-10 runs the game.",
-                    }
-                },
-                "required": ["speed"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "place_building",
-            "description": (
-                "Place one building at a map tile. On invalid placement the bridge "
-                "returns a teaching error with a suggested valid tile to retry."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "spec": {
-                        "type": "string",
-                        "enum": BUILDING_SPECS,
-                        "description": "Building spec id to place.",
-                    },
-                    "x": {"type": "integer", "description": "Map X coordinate."},
-                    "y": {
-                        "type": "integer",
-                        "description": "Vertical layer / height (usually 0 at ground).",
-                    },
-                    "z": {"type": "integer", "description": "Map Z coordinate."},
-                    "orientation": {
-                        "type": "string",
-                        "enum": ORIENTATIONS,
-                        "description": "Facing direction.",
-                    },
-                },
-                "required": ["spec", "x", "y", "z", "orientation"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "save",
-            "description": "Save a rollback checkpoint before a risky change.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Save slot / name.",
-                    }
-                },
-                "required": ["name"],
-            },
-        },
-    },
-]
-
-# Map each tool name -> the /act command string the bridge expects, plus how to
-# turn the tool's flat args into the command's args object.
-TOOL_TO_ACT = {
+# Map each action name -> the /act command string the bridge expects, plus how to
+# turn the model's args into the command's args object.
+ACTION_TO_ACT = {
     "set_speed": ("set_speed", lambda a: {"speed": a.get("speed", 0)}),
-    "place_building": (
-        "place_building",
-        lambda a: {
-            "spec": a.get("spec"),
-            "x": a.get("x"),
-            "y": a.get("y", 0),
-            "z": a.get("z"),
-            "orientation": a.get("orientation", "North"),
-        },
-    ),
+    # Forward the model's raw args; the bridge normalizes spec/spec_id, flat vs
+    # nested position{x,y,z}, and nulls, and returns a nearest-valid suggestion.
+    "place_building": ("place_building", lambda a: dict(a)),
+    "demolish": ("demolish", lambda a: dict(a)),
     "save": ("save", lambda a: {"name": a.get("name", "agent")}),
 }
 
@@ -348,18 +257,18 @@ class Bridge:
 
 
 # ---------------------------------------------------------------------------
-# Ollama client — POST /api/chat with tools, non-streaming.
+# Ollama client — POST /api/chat with schema-constrained JSON, non-streaming.
 # ---------------------------------------------------------------------------
 class Ollama:
     def __init__(self, base_url, model):
         self.base = base_url.rstrip("/")
         self.model = model
 
-    def chat(self, messages, tools):
+    def chat(self, messages):
         body = {
             "model": self.model,
             "messages": messages,
-            "tools": tools,
+            "format": ACTION_SCHEMA,
             "stream": False,
             "options": {"temperature": 0.2, "num_ctx": 16384},
         }
@@ -521,29 +430,82 @@ def _short(obj, n=300):
     return s if len(s) <= n else s[:n] + "..."
 
 
-def parse_tool_calls(message):
-    """Extract normalized tool calls from an Ollama chat message.
+def first_json_object_block(text):
+    """Return the first balanced {...} block from text, or None."""
+    if not isinstance(text, str):
+        return None
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+        start = text.find("{", start + 1)
+    return None
 
-    Returns a list of {"name": str, "args": dict}. Ollama returns tool calls under
-    message["tool_calls"][i]["function"] with "name" and "arguments" (already a
-    dict, but tolerate a JSON string). Returns [] if none / malformed.
+
+def parse_action_message(message):
+    """Parse Ollama message.content into {"reasoning", "action", "args"}.
+
+    If the model somehow violates the schema, fall back to the first JSON object
+    embedded in content. If that also fails, return a local noop.
     """
-    calls = []
-    raw = (message or {}).get("tool_calls") or []
-    for c in raw:
-        fn = (c or {}).get("function") or {}
-        name = fn.get("name")
-        args = fn.get("arguments", {})
-        if isinstance(args, str):
+    content = (message or {}).get("content", "")
+    raw = content if isinstance(content, str) else json.dumps(content, default=str)
+
+    parsed = None
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        block = first_json_object_block(raw)
+        if block is not None:
             try:
-                args = json.loads(args)
+                parsed = json.loads(block)
             except Exception:
-                args = {}
-        if not isinstance(args, dict):
-            args = {}
-        if name:
-            calls.append({"name": name, "args": args})
-    return calls
+                parsed = None
+
+    if not isinstance(parsed, dict):
+        return {
+            "reasoning": "Model response was not valid JSON; defaulting to noop.",
+            "action": "noop",
+            "args": {},
+            "raw": raw,
+            "parse_error": True,
+        }
+
+    reasoning = parsed.get("reasoning", "")
+    action = parsed.get("action")
+    args = parsed.get("args", {})
+    if not isinstance(reasoning, str):
+        reasoning = json.dumps(reasoning, default=str)
+    if action not in ACTION_SCHEMA["properties"]["action"]["enum"]:
+        return {
+            "reasoning": "Model returned an unknown action; defaulting to noop.",
+            "action": "noop",
+            "args": {},
+            "raw": raw,
+            "parse_error": True,
+        }
+    if not isinstance(args, dict):
+        args = {}
+    return {"reasoning": reasoning, "action": action, "args": args, "raw": raw}
 
 
 def journal_append(path, record):
@@ -611,12 +573,12 @@ def run(cfg, run_id, max_steps):
 
             # --- 2. Compose user message & call the LLM --------------------
             user_msg = {"role": "user", "content": state_block +
-                        "\n\nChoose the single most urgent action now. Make exactly "
-                        "ONE tool call."}
+                        "\n\nChoose the single most urgent action now. Return ONLY "
+                        "the JSON object matching the schema."}
             messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-HISTORY_LIMIT:] + [user_msg]
 
             try:
-                assistant_msg = ollama.chat(messages, TOOLS)
+                assistant_msg = ollama.chat(messages)
             except Exception as e:
                 consecutive_errors += 1
                 log_stderr("step %d: ollama failed: %s err#%d" % (step, e, consecutive_errors))
@@ -630,44 +592,26 @@ def run(cfg, run_id, max_steps):
                 time.sleep(2)
                 continue
 
-            calls = parse_tool_calls(assistant_msg)
+            chosen = parse_action_message(assistant_msg)
 
-            # --- 3. No tool call -> nudge once, then move on ---------------
-            if not calls:
-                content = (assistant_msg or {}).get("content", "")
-                log_stderr("step %d: no tool call. Nudging. (model said: %s)"
-                           % (step, _short(content, 120)))
-                # Keep the assistant turn, add a nudge, re-ask ONCE.
-                nudge_messages = messages + [
-                    {"role": "assistant", "content": content},
-                    {"role": "user", "content":
-                     "You did not call a tool. Respond with exactly one tool call "
-                     "(set_speed if nothing is urgent)."},
-                ]
-                try:
-                    assistant_msg = ollama.chat(nudge_messages, TOOLS)
-                    calls = parse_tool_calls(assistant_msg)
-                except Exception as e:
-                    log_stderr("step %d: nudge ollama failed: %s" % (step, e))
-                    calls = []
+            # --- 3. Execute the chosen action -------------------------------
+            action = chosen["action"]
+            args = chosen["args"]
+            if chosen.get("parse_error"):
+                log_stderr(
+                    "step %d: invalid JSON action; defaulting to noop. content=%s"
+                    % (step, _short(chosen.get("raw", ""), 120))
+                )
 
-            if not calls:
-                # Still nothing — record it, advance time ourselves so the run
-                # doesn't stall, and continue.
-                log_stderr("step %d: still no tool call after nudge; defaulting to set_speed 0." % step)
-                chosen = {"name": "set_speed", "args": {"speed": 0}}
-                act_status, act_result = bridge.act("set_speed", {"speed": 0})
+            if action == "noop":
+                act_status = 200
+                act_result = {"ok": True, "noop": True}
             else:
-                # Take the FIRST tool call (one action per turn by design).
-                chosen = calls[0]
-                name = chosen["name"]
-                args = chosen["args"]
-
-                mapping = TOOL_TO_ACT.get(name)
+                mapping = ACTION_TO_ACT.get(action)
                 if mapping is None:
-                    # Model invented / hallucinated a tool name.
-                    log_stderr("step %d: unknown tool '%s' — treating as malformed." % (step, name))
-                    act_status, act_result = 0, {"ok": False, "error": "unknown_tool", "tool": name}
+                    # Should be unreachable after parse_action_message validation.
+                    log_stderr("step %d: unknown action '%s' — treating as malformed." % (step, action))
+                    act_status, act_result = 0, {"ok": False, "error": "unknown_action", "action": action}
                 else:
                     command, arg_fn = mapping
                     act_args = arg_fn(args)
@@ -683,8 +627,8 @@ def run(cfg, run_id, max_steps):
 
             if act_status == 200 and (ok or err == "not_implemented"):
                 consecutive_errors = 0
-            elif act_status == 0 and (isinstance(act_result, dict) and act_result.get("error") == "unknown_tool"):
-                # Malformed tool call from the model — count softly, re-prompt via history.
+            elif act_status == 0 and (isinstance(act_result, dict) and act_result.get("error") == "unknown_action"):
+                # Malformed action from the model — count softly, re-prompt via history.
                 consecutive_errors += 1
             elif not ok:
                 # Teaching error (invalid placement, etc.) — NOT a transport failure;
@@ -696,8 +640,15 @@ def run(cfg, run_id, max_steps):
             # --- 5. Per-step stdout line -----------------------------------
             status_word = "OK" if ok else ("ERR:%s" % err if err else "?")
             print(
-                "step %02d/%d | %s(%s) -> %s"
-                % (step, max_steps, chosen["name"], _short(chosen["args"], 80), status_word),
+                "step %02d/%d | %s(%s) -> %s | %s"
+                % (
+                    step,
+                    max_steps,
+                    action,
+                    _short(args, 80),
+                    status_word,
+                    _short(chosen.get("reasoning", ""), 120),
+                ),
                 flush=True,
             )
 
@@ -709,7 +660,12 @@ def run(cfg, run_id, max_steps):
                     "step": step,
                     "event": "step",
                     "state": state_summary_for_journal(state),
-                    "action": {"tool": chosen["name"], "args": chosen["args"]},
+                    "action": {
+                        "name": action,
+                        "args": args,
+                        "reasoning": chosen.get("reasoning", ""),
+                        "raw": chosen.get("raw", ""),
+                    },
                     "result": {"http_status": act_status, "body": act_result},
                 },
             )
@@ -719,7 +675,14 @@ def run(cfg, run_id, max_steps):
             history.append(user_msg)
             history.append({
                 "role": "assistant",
-                "content": "Called %s with %s" % (chosen["name"], json.dumps(chosen["args"], default=str)),
+                "content": json.dumps(
+                    {
+                        "reasoning": chosen.get("reasoning", ""),
+                        "action": action,
+                        "args": args,
+                    },
+                    default=str,
+                ),
             })
             history.append({
                 "role": "user",

@@ -14,6 +14,7 @@ namespace TimberBridge {
       Bind<StateReader>().AsSingleton();
       Bind<Actuator>().AsSingleton();
       Bind<BlueprintsReader>().AsSingleton();
+      Bind<MapReader>().AsSingleton();
       Bind<BridgeHttpServer>().AsSingleton();
     }
 
