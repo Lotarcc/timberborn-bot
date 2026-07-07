@@ -116,6 +116,24 @@ namespace TimberBridge {
       return JsonConvert.SerializeObject(dto);
     }
 
+    // Tiles of all currently-mature (cuttable-ready) trees — used by the
+    // designate_cutting action to mark the whole standing forest for felling.
+    public List<Vector3Int> MatureTreeTiles() {
+      var tiles = new List<Vector3Int>();
+      foreach (NaturalResourceModel model in _entities.GetEnabled<NaturalResourceModel>()) {
+        try {
+          if (model.GetComponent<Cuttable>() == null) continue;
+          var growable = model.GetComponent<Growable>();
+          if (growable != null && !growable.IsGrown) continue; // only fell grown trees
+          var block = model.GetComponent<BlockObject>();
+          if (block != null) tiles.Add(block.Coordinates);
+        } catch (Exception e) {
+          Debug.LogError("[TimberBridge] mature-tree scan failed: " + e);
+        }
+      }
+      return tiles;
+    }
+
     // CONFIRMED: Gatherable.Yielder : Yielder; Yielder.IsYielding => Yield.Amount > 0.
     private static bool GatherableIsYielding(Gatherable gatherable) {
       try {

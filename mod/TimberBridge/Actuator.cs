@@ -8,6 +8,7 @@ using Timberborn.Buildings;
 using Timberborn.ConstructionSites;
 using Timberborn.Coordinates;
 using Timberborn.EntitySystem;
+using Timberborn.Forestry;
 using Timberborn.GameDistricts;
 using Timberborn.GameSaveRepositorySystem;
 using Timberborn.GameSaveRuntimeSystem;
@@ -38,6 +39,8 @@ namespace TimberBridge {
     private readonly GameLoader _loader;
     private readonly DistrictCenterRegistry _districts;
     private readonly ReachabilityReader _reachability;
+    private readonly TreeCuttingArea _cuttingArea;
+    private readonly ResourcesReader _resources;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -49,7 +52,9 @@ namespace TimberBridge {
                     GameSaver saver,
                     GameLoader loader,
                     DistrictCenterRegistry districts,
-                    ReachabilityReader reachability) {
+                    ReachabilityReader reachability,
+                    TreeCuttingArea cuttingArea,
+                    ResourcesReader resources) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -61,6 +66,8 @@ namespace TimberBridge {
       _loader = loader;
       _districts = districts;
       _reachability = reachability;
+      _cuttingArea = cuttingArea;
+      _resources = resources;
     }
 
     public string Act(string command, JObject args) {
@@ -83,6 +90,8 @@ namespace TimberBridge {
             return SetPriority(GetCoord(args, "x"), GetCoord(args, "y"), GetCoord(args, "z"),
                                GetStr(args, "priority"));
           case "save": return Save(GetStr(args, "name"));
+          case "designate_cutting": return DesignateCutting(args, true);
+          case "undesignate_cutting": return DesignateCutting(args, false);
           case "batch": return Batch(args);
           default: return Err("not_implemented", command);
         }
@@ -512,6 +521,35 @@ namespace TimberBridge {
         case "4": case "veryhigh": case "very_high": p = Priority.VeryHigh; return true;
         default: return false;
       }
+    }
+
+    // Designate (or undesignate) trees for cutting. Cutting in Timberborn is a
+    // GLOBAL registry keyed by tile: TreeCuttingArea.AddCoordinates — a staffed
+    // Lumberjack then fells any reachable designated tree (the flag is a workplace,
+    // not a radius). Args: {"tiles":[{x,y,z},...]} to mark specific trees, or
+    // {"all":true} (or no tiles) to mark every currently-mature tree on the map.
+    private string DesignateCutting(JObject args, bool add) {
+      var tiles = new List<Vector3Int>();
+      JArray arr = args?["tiles"] as JArray;
+      bool all = GetBool(args, "all", false);
+      if (arr != null && arr.Count > 0 && !all) {
+        foreach (JToken t in arr) {
+          var o = t as JObject;
+          if (o == null) continue;
+          tiles.Add(new Vector3Int(
+            Present(o["x"]) ? o["x"].ToObject<int>() : 0,
+            Present(o["y"]) ? o["y"].ToObject<int>() : 0,
+            Present(o["z"]) ? o["z"].ToObject<int>() : 0));
+        }
+      } else {
+        // No explicit tiles (or all=true): operate on every mature tree.
+        tiles = _resources.MatureTreeTiles();
+      }
+      if (tiles.Count == 0) return Err("no_trees", "no tiles given and no mature trees found");
+
+      if (add) { _cuttingArea.AddCoordinates(tiles); }
+      else { _cuttingArea.RemoveCoordinates(tiles); }
+      return Ok(new { command = add ? "designate_cutting" : "undesignate_cutting", tiles = tiles.Count });
     }
 
     // Execute an ordered list of actions in one main-thread hop:
