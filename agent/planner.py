@@ -418,12 +418,18 @@ def _sites_under_construction(state):
 
 
 def _building_count(state, spec):
+    # Building count keys are faction-suffixed ("LumberjackFlag.Folktails"); match
+    # the bare prefix so "LumberjackFlag" finds it. Counts include construction
+    # sites, so a just-placed (still building) flag correctly reads as present and
+    # the planner stops demanding another.
     counts = (((state or {}).get("buildings") or {}).get("counts") or {})
     lowered = str(spec).lower()
+    total = 0
     for key, value in counts.items():
-        if str(key).lower() == lowered:
-            return _as_int(value, 0)
-    return 0
+        name = str(key).lower()
+        if name == lowered or name.startswith(lowered + "."):
+            total += _as_int(value, 0)
+    return total
 
 
 def _logs_available(state):
