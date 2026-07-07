@@ -580,27 +580,27 @@ def _resource_aware_candidates(goal_id, spec, state, map_data, arrays, dc, fallb
 
 
 def _lumberjack_resource_candidates(arrays, dc, resources, road_reachable, blocked, limit):
+    # Cutting is GLOBAL: a staffed Lumberjack fells any REACHABLE designated tree,
+    # so the flag does NOT need to be near the forest. Placing it in the forest is
+    # actually harmful — surrounded by tree-occupied tiles it is hard to connect and
+    # often reads unreachable. So we place it on clear reachable land NEAREST the
+    # district center (trivial to connect + staff); the designate_cutting followup
+    # marks the trees and the beaver walks out to cut them.
     mature = [
         item for item in resources.get("trees", []) or []
         if isinstance(item, dict) and item.get("mature") is True
     ]
     if not mature:
-        return []
-    species, _total = _dominant_species(mature, "Tree")
+        return []  # nothing to cut; fall back to generic candidates
+    species, total = _dominant_species(mature, "Tree")
     candidates = []
     for tile in _candidate_land_tiles(arrays, road_reachable, blocked):
-        adjacent = any(_manhattan_xy(tile, tree) == 1 for tree in mature)
-        if not adjacent:
-            continue
-        nearby = [tree for tree in mature if _manhattan_xy(tile, tree) <= 8]
-        if not nearby:
-            continue
-        nearby_species, nearby_total = _dominant_species(nearby, species)
         candidate = _candidate(
             tile,
-            "near %s mature %s" % (nearby_total, _plural_species(nearby_species, nearby_total)),
+            "clear near-DC land; cuts %d designated %s globally"
+            % (total, _plural_species(species, total)),
         )
-        candidates.append((-nearby_total, _distance(tile, dc), tile["y"], tile["x"], candidate))
+        candidates.append((_distance(tile, dc), tile["y"], tile["x"], candidate))
     candidates.sort()
     return [item[-1] for item in candidates[:limit]]
 

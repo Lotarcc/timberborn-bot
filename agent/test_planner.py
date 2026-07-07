@@ -55,13 +55,18 @@ class PlannerTests(unittest.TestCase):
 
         self.assertLessEqual(len(report["text"].splitlines()), 25)
 
-    def test_lumberjack_uses_resource_cluster_and_followup_cutting(self):
+    def test_lumberjack_placed_near_dc_with_followup_cutting(self):
+        # Cutting is global, so the flag goes on clear reachable land NEAREST the
+        # district center (not in the forest), and the trees are handled by the
+        # designate_cutting followup.
         report = planner.plan_report(self.state, self.map_data, resources=self.resources)
         candidates = report["candidates_by_goal"]["build_lumberjack"]
         first = candidates[0]
+        dc = self.state["district_center"]
 
-        self.assertEqual((first["x"], first["y"], first["z"]), (12, 18, 4))
-        self.assertIn("near 12 mature Pines", first["why"])
+        # nearest candidate should be close to the DC, not out at the tree cluster
+        self.assertLessEqual(abs(first["x"] - dc["x"]) + abs(first["y"] - dc["y"]), 4)
+        self.assertIn("cuts", first["why"])
         self.assertEqual(
             report["followups"]["build_lumberjack"],
             [{"action": "designate_cutting", "args": {"all": True}}],
