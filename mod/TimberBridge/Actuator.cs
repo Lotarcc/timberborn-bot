@@ -479,10 +479,17 @@ namespace TimberBridge {
         Vector3Int roadTile = default(Vector3Int);
         bool foundRoad = false;
 
+        // Footprint obstacle test is by (x,y): the building occupies its whole column,
+        // and terrain-snapped neighbours may carry a different z than the stored footprint.
+        var footprintXY = new HashSet<Vector2Int>();
+        if (useFootprintObstacles) {
+          foreach (Vector3Int f in footprint) footprintXY.Add(new Vector2Int(f.x, f.y));
+        }
+
         // Seeds map to themselves; reconstruction stops at parent==self, so the route always
         // includes the access tile it started from.
         foreach (Vector3Int t in startTiles) {
-          if (useFootprintObstacles && footprint.Contains(t)) continue; // never start inside the building
+          if (useFootprintObstacles && footprintXY.Contains(new Vector2Int(t.x, t.y))) continue;
           if (visited.Add(t)) { parent[t] = t; queue.Enqueue(t); }
         }
 
@@ -497,9 +504,13 @@ namespace TimberBridge {
             break;
           }
 
-          foreach (Vector3Int n in Orthogonal(cur)) {
+          // Terrain-aware neighbours: each horizontal step lands on that column's
+          // SURFACE height, and is walkable only if the height change is <= 1 (beavers
+          // ramp up/down a single level; paths follow terrain). This lets a pump at
+          // water level connect up to the district road one level above.
+          foreach (Vector3Int n in WalkableNeighbors(cur)) {
             if (!visited.Add(n)) continue;
-            if (useFootprintObstacles && footprint.Contains(n)) continue; // route AROUND the building
+            if (useFootprintObstacles && footprintXY.Contains(new Vector2Int(n.x, n.y))) continue;
             // Walk a neighbour if we can route through it: it's already on the road,
             // it already carries a path (traverse it, we just won't re-lay), or a fresh
             // Path would validly place there.
@@ -662,6 +673,29 @@ namespace TimberBridge {
       yield return new Vector3Int(c.x, c.y + 1, c.z);
       yield return new Vector3Int(c.x, c.y - 1, c.z);
     }
+
+    // The 4 horizontal neighbours snapped to each column's terrain SURFACE height,
+    // walkable only if the height step from `c` is <= 1 (beavers/paths ramp one
+    // level). Lets auto-connect route across small terrain steps (e.g. a pump at
+    // the water's edge up to the district road one level higher).
+    private IEnumerable<Vector3Int> WalkableNeighbors(Vector3Int c) {
+      var dirs = new[] {
+        new Vector2Int(1, 0), new Vector2Int(-1, 0),
+        new Vector2Int(0, 1), new Vector2Int(0, -1),
+      };
+      foreach (Vector2Int d in dirs) {
+        int nx = c.x + d.x, ny = c.y + d.y;
+        int sz;
+        try { sz = _terrain.GetTerrainHeightBelow(new Vector3Int(nx, ny, TerrainTopZ)); }
+        catch { sz = c.z; }
+        if (Math.Abs(sz - c.z) <= 1) {
+          yield return new Vector3Int(nx, ny, sz);
+        }
+      }
+    }
+
+    // A height ceiling for surface scans; the map's vertical extent never exceeds this.
+    private const int TerrainTopZ = 32;
 
     // Can a Path be placed here? Valid per BlockValidator (handles terrain/water/occupancy)
     // and not already occupied by a non-path object we'd clash with.
