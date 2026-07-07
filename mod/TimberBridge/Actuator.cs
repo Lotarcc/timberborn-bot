@@ -12,9 +12,13 @@ using Timberborn.Forestry;
 using Timberborn.GameDistricts;
 using Timberborn.GameSaveRepositorySystem;
 using Timberborn.GameSaveRuntimeSystem;
+using Timberborn.Planting;
 using Timberborn.PrioritySystem;
 using Timberborn.TemplateSystem;
+using Timberborn.TerrainSystem;       // ITerrainService              (CONFIRMED, MapReader uses it)
 using Timberborn.TimeSystem;
+using Timberborn.WaterBuildings;      // WaterInputSpec               (CONFIRMED via decompile)
+using Timberborn.WaterSystem;         // IThreadSafeWaterMap          (CONFIRMED, MapReader uses it)
 using UnityEngine;
 
 namespace TimberBridge {
@@ -41,6 +45,9 @@ namespace TimberBridge {
     private readonly ReachabilityReader _reachability;
     private readonly TreeCuttingArea _cuttingArea;
     private readonly ResourcesReader _resources;
+    private readonly IThreadSafeWaterMap _waterMap;
+    private readonly ITerrainService _terrain;
+    private readonly PlantingService _planting;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -54,7 +61,10 @@ namespace TimberBridge {
                     DistrictCenterRegistry districts,
                     ReachabilityReader reachability,
                     TreeCuttingArea cuttingArea,
-                    ResourcesReader resources) {
+                    ResourcesReader resources,
+                    IThreadSafeWaterMap waterMap,
+                    ITerrainService terrain,
+                    PlantingService planting) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -68,6 +78,9 @@ namespace TimberBridge {
       _reachability = reachability;
       _cuttingArea = cuttingArea;
       _resources = resources;
+      _waterMap = waterMap;
+      _terrain = terrain;
+      _planting = planting;
     }
 
     public string Act(string command, JObject args) {
@@ -92,6 +105,7 @@ namespace TimberBridge {
           case "save": return Save(GetStr(args, "name"));
           case "designate_cutting": return DesignateCutting(args, true);
           case "undesignate_cutting": return DesignateCutting(args, false);
+          case "designate_planting": return DesignatePlanting(args);
           case "batch": return Batch(args);
           default: return Err("not_implemented", command);
         }
@@ -116,7 +130,33 @@ namespace TimberBridge {
       var coord = new Vector3Int(x, y, z);
       var placement = new Placement(coord, o, FlipMode.Unflipped);
 
-      if (!_validator.BlocksValid(spec, placement)) {
+      // WATER-INTAKE BUILDINGS (WaterPump / LargeWaterPump / etc.): the footprint sits on
+      // LAND (MatterBelow.Ground), and a separate intake column one tile above the base must
+      // hang OVER water deep enough that WaterInputCoordinates.Depth > 0 — otherwise the pump
+      // places but is permanently obstructed (produces nothing). CONFIRMED via decompile:
+      //   * BlockValidator.BlocksValid does NOT check water at all (only terrain/occupancy/
+      //     matter-below), and it does NOT run IPreviewValidator. So the water requirement is
+      //     invisible to BlocksValid — approach (B) alone would place obstructed pumps.
+      //   * WaterInputPipeValidator.IsValid == (WaterInputCoordinates.Depth > 0), where
+      //     Depth = (Transform(WaterInputSpec.WaterInputCoordinates,placement).z + BaseZ + 1)
+      //             - firstOccupiedZ, capped by WaterInputSpec.MaxDepth (pump=shallow, large=deep).
+      // We therefore run our OWN shoreline search that satisfies BOTH BlocksValid (footprint on
+      // land) AND the intake-over-clean-water predicate, trying the 4 orientations so the intake
+      // faces the water. Guarded — any failure falls through to the normal path below.
+      if (IsWaterIntake(spec)) {
+        Placement wp;
+        if (TryPlaceWaterIntake(spec, coord, o, out wp)) {
+          coord = wp.Coordinates;
+          o = wp.Orientation;
+          placement = wp;
+        } else {
+          // No clean, deep-enough shoreline tile found near the guess or district center.
+          return Err("invalid_placement",
+                     specId + " invalid at (" + x + "," + y + "," + z + "); no clean-water shoreline "
+                     + "tile found where the intake sits over water of the accepted depth near the "
+                     + "requested point or district center");
+        }
+      } else if (!_validator.BlocksValid(spec, placement)) {
         // Search around the guess, then around the district center (where building
         // actually happens), across a few height levels.
         Vector3Int found;
@@ -136,7 +176,11 @@ namespace TimberBridge {
       // and only when it strictly improves connectivity; otherwise keeps the requested one.
       // (ChooseBestOrientation returns `o` unchanged on any uncertainty, so `placement` stays
       // valid.) The requested orientation is respected on ties.
-      if (autoConnect && spec.HasSpec<BuildingSpec>()) {
+      // Skip auto-orient for water-intake buildings: their orientation is pinned by
+      // TryPlaceWaterIntake so the intake faces the water, and ChooseBestOrientation only
+      // scores road connectivity (not the water predicate) — letting it rotate here could
+      // turn the intake back toward dry land and silently obstruct the pump.
+      if (autoConnect && spec.HasSpec<BuildingSpec>() && !IsWaterIntake(spec)) {
         Orientation best = ChooseBestOrientation(spec, coord, o);
         if (best != o) {
           o = best;
@@ -163,8 +207,161 @@ namespace TimberBridge {
         autoConnectResult = AutoConnect(coord, spec);
       }
 
-      return Ok(new { command = "place_building", spec = specId, x, y, z,
+      // Report the tile+orientation ACTUALLY used (water-intake recovery may have relocated
+      // and re-oriented the building from the requested x/y/z), plus the originally requested
+      // point, so the agent sees exactly where the pump landed.
+      return Ok(new { command = "place_building", spec = specId,
+                      x = coord.x, y = coord.y, z = coord.z,
+                      requested = new { x, y, z },
                       orientation = o.ToString(), mode, auto_connect = autoConnectResult });
+    }
+
+    // === WATER-INTAKE PLACEMENT (WaterPump / LargeWaterPump / DeepWaterPump / …) ===
+    //
+    // How far along the shoreline we scan for a valid pump tile (Chebyshev radius). A pump
+    // must land on land whose intake column hangs over clean water of the accepted depth;
+    // the requested guess is often the water tile itself (invalid — pumps sit on LAND), so
+    // we sweep nearby land tiles nearest-first.
+    private static readonly Vector3Int[] WaterSearchOffsets = BuildSearchOffsets(12);
+
+    // Generic detection of a water-intake building: it carries a WaterInputSpec component
+    // spec (CONFIRMED: WaterPump/LargeWaterPump attach WaterInputSpec + WaterInputCoordinates).
+    // Falls back to a name check so a spec-shape change can't silently disable the feature.
+    // Guarded — never throws.
+    private bool IsWaterIntake(BlockObjectSpec spec) {
+      try {
+        if (spec.HasSpec<WaterInputSpec>()) return true;
+      } catch { /* fall through to name check */ }
+      try {
+        string name = spec.Blueprint != null ? spec.Blueprint.Name : null;
+        return name != null && name.IndexOf("Pump", StringComparison.OrdinalIgnoreCase) >= 0;
+      } catch {
+        return false;
+      }
+    }
+
+    // Try to find a valid placement for a water-intake building near `guess` (then near the
+    // district center), trying all 4 orientations so the intake faces the water. A placement
+    // is accepted iff BOTH:
+    //   (1) BlockValidator.BlocksValid(spec, placement) — footprint on land, no clashes; AND
+    //   (2) the intake column sits over CLEAN water of the accepted depth (IntakeSatisfied).
+    // Returns the nearest such placement (nearest to `guess`, then a sweep around the DC).
+    // Guarded — returns false on any failure so the caller reports invalid_placement cleanly.
+    private bool TryPlaceWaterIntake(BlockObjectSpec spec, Vector3Int guess, Orientation requested, out Placement placement) {
+      placement = new Placement(guess, requested, FlipMode.Unflipped);
+      try {
+        // First: is the requested tile+orientation already a valid, water-satisfied placement?
+        if (_validator.BlocksValid(spec, placement) && IntakeSatisfied(spec, guess, requested)) {
+          return true;
+        }
+        // Sweep the shoreline near the guess, then near the district center. Prefer the
+        // requested orientation on ties by trying it first for each candidate tile.
+        if (SearchWaterIntake(spec, guess, requested, out placement)) return true;
+        Vector3Int dc = GetDistrictCenter(guess);
+        if (dc != guess && SearchWaterIntake(spec, dc, requested, out placement)) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    }
+
+    // Nearest-first sweep of candidate LAND tiles around `center`, across a few z-levels,
+    // trying the requested orientation first then the other three, returning the first
+    // placement that is BlocksValid AND has its intake over clean water of accepted depth.
+    private bool SearchWaterIntake(BlockObjectSpec spec, Vector3Int center, Orientation requested, out Placement placement) {
+      Orientation[] orients = OrientationsPreferring(requested);
+      int[] zDeltas = { 0, -1, 1, -2, 2, -3, 3 };
+      foreach (int dz in zDeltas) {
+        int z = center.z + dz;
+        if (z < 0) continue;
+        // center tile first, then nearest-first ring.
+        if (TryOrientationsAt(spec, new Vector3Int(center.x, center.y, z), orients, out placement)) return true;
+        foreach (Vector3Int off in WaterSearchOffsets) {
+          var c = new Vector3Int(center.x + off.x, center.y + off.y, z);
+          if (TryOrientationsAt(spec, c, orients, out placement)) return true;
+        }
+      }
+      placement = new Placement(center, requested, FlipMode.Unflipped);
+      return false;
+    }
+
+    private bool TryOrientationsAt(BlockObjectSpec spec, Vector3Int coord, Orientation[] orients, out Placement placement) {
+      foreach (Orientation o in orients) {
+        var p = new Placement(coord, o, FlipMode.Unflipped);
+        if (_validator.BlocksValid(spec, p) && IntakeSatisfied(spec, coord, o)) {
+          placement = p;
+          return true;
+        }
+      }
+      placement = new Placement(coord, orients[0], FlipMode.Unflipped);
+      return false;
+    }
+
+    private static Orientation[] OrientationsPreferring(Orientation first) {
+      var all = new List<Orientation> { first };
+      foreach (Orientation o in new[] { Orientation.Cw0, Orientation.Cw90, Orientation.Cw180, Orientation.Cw270 }) {
+        if (o != first) all.Add(o);
+      }
+      return all.ToArray();
+    }
+
+    // The intake predicate the game uses (CONFIRMED via decompile of WaterInputCoordinates):
+    //   startCoord = Transform(WaterInputSpec.WaterInputCoordinates, placement) + (0,0, BaseZ+1)
+    //   scan z from startCoord.z-1 down to startCoord.z-MaxDepth; the first OCCUPIED tile
+    //   (terrain-underground OR a non-overridable block) stops the column; Depth = gap size.
+    //   WaterInputPipeValidator.IsValid == (Depth > 0).
+    // We additionally require the intake tile to hold CLEAN water (WaterDepth>0,
+    // contamination==0) so the placed pump actually produces clean water — the caller's
+    // "near a clean-water shoreline" contract. Returns false on any uncertainty (guarded),
+    // which just makes that candidate be skipped.
+    private bool IntakeSatisfied(BlockObjectSpec spec, Vector3Int coord, Orientation o) {
+      try {
+        WaterInputSpec wis;
+        try { wis = spec.GetSpec<WaterInputSpec>(); }
+        catch { return false; }               // no water-input spec -> not our predicate
+        if (wis == null) return false;
+
+        int maxDepth = Mathf.Max(1, wis.MaxDepth);
+        // Transform the footprint-local intake coord by this placement, matching the game's
+        // Blocks.Transform: Orientation.Transform(local) + placementCoord (Unflipped = identity).
+        Vector3Int intakeXY = coord + o.Transform(wis.WaterInputCoordinates);
+        int baseZ = spec.BaseZ;               // spec-declared base offset (usually 0)
+        int topZ = intakeXY.z + baseZ + 1;    // startCoordinates.z in the game code
+
+        // Find the first occupied z scanning down (game's GetZCoordinateLimitedByDepth). The
+        // intake floor sits just above it; Depth = topZ - intakeFloorZ. Depth>0 required.
+        int intakeFloorZ = topZ - maxDepth;   // default if nothing occupied within maxDepth
+        for (int zz = topZ - 1; zz >= topZ - maxDepth; zz--) {
+          if (IntakeTileOccupied(new Vector3Int(intakeXY.x, intakeXY.y, zz))) {
+            intakeFloorZ = zz + 1;
+            break;
+          }
+        }
+        int depth = topZ - intakeFloorZ;
+        if (depth <= 0) return false;         // == WaterInputPipeValidator.IsValid == false
+
+        // The tile the intake actually draws from is the column floor. Require clean water
+        // there so the pump is productive (a dry gap satisfies Depth>0 but pumps nothing).
+        var intakeCell = new Vector3Int(intakeXY.x, intakeXY.y, intakeFloorZ);
+        float waterDepth = _waterMap.WaterDepth(intakeCell);
+        if (waterDepth <= 0f) return false;   // no water under the intake
+        float contamination = _waterMap.ColumnContamination(intakeCell);
+        if (contamination > 0f) return false; // not clean water
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    // Mirrors WaterInputCoordinates.IsTileOccupied: terrain-underground counts as occupied,
+    // as does any non-overridable block object (pipes/allowers don't block). Guarded.
+    private bool IntakeTileOccupied(Vector3Int cell) {
+      try {
+        if (_terrain.Underground(cell)) return true;
+        return _blocks.AnyNonOverridableObjectsAt(cell, BlockOccupations.All);
+      } catch {
+        return false;
+      }
     }
 
     // Number of Path construction sites AutoConnect will ever lay in one call. Hard cap
@@ -550,6 +747,35 @@ namespace TimberBridge {
       if (add) { _cuttingArea.AddCoordinates(tiles); }
       else { _cuttingArea.RemoveCoordinates(tiles); }
       return Ok(new { command = add ? "designate_cutting" : "undesignate_cutting", tiles = tiles.Count });
+    }
+
+    // Designate tiles for a Forester to replant (the wood-sustainability loop).
+    // Like cutting, planting is a global registry keyed by tile: a Forester only
+    // plants MARKED spots that are also moist+uncontaminated+empty+in-range. Args:
+    // {"tiles":[{x,y,z},...], "species":"Pine"}. species is a plantable template
+    // name; defaults to "Pine" (a common Folktails tree). The game's own validators
+    // reject bad tiles at plant time, so over-marking is safe.
+    private string DesignatePlanting(JObject args) {
+      string species = GetStr(args, "species") ?? "Pine";
+      var tiles = new List<Vector3Int>();
+      JArray arr = args?["tiles"] as JArray;
+      if (arr != null) {
+        foreach (JToken t in arr) {
+          var o = t as JObject;
+          if (o == null) continue;
+          tiles.Add(new Vector3Int(
+            Present(o["x"]) ? o["x"].ToObject<int>() : 0,
+            Present(o["y"]) ? o["y"].ToObject<int>() : 0,
+            Present(o["z"]) ? o["z"].ToObject<int>() : 0));
+        }
+      }
+      if (tiles.Count == 0) return Err("bad_args", "tiles[] required");
+      int marked = 0;
+      foreach (Vector3Int t in tiles) {
+        try { _planting.SetPlantingCoordinates(t, species); marked++; }
+        catch (Exception e) { Debug.LogError("[TimberBridge] plant mark failed at " + t + ": " + e); }
+      }
+      return Ok(new { command = "designate_planting", species, tiles = marked });
     }
 
     // Execute an ordered list of actions in one main-thread hop:
