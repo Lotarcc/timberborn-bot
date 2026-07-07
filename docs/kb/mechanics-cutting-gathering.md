@@ -21,21 +21,27 @@ a Forester once the bootstrap is stable.
 RULE: `undesignate_cutting` cancels. Designation persists on a tile even after the
 tree is felled (a regrown tree there gets cut again).
 
-## Berry bushes / Food (GATHERING) — automatic, range-based
-RULE: Gathering needs NO per-plant designation. A GathererFlag automatically
-harvests READY gatherables within its terrain RANGE. Place the flag so its range
-covers a cluster of ready bushes (see /resources `gatherables:[{x,y,z,ready}]`).
-RULE: A gatherer may need the target SPECIES enabled/prioritized on the flag (check
-the gather action if berries don't rise after placing a flag on ready bushes).
-RULE: Wild bushes have limited/again-growing yield; a few gatherers on a big bush
-cluster feed the early colony, but plan a Farmhouse (carrots) for reliable food
-before the population grows. Berries alone will decline if consumption > gather rate.
+## Berry bushes / Food (GATHERING) — automatic in range, needs a WORKER
+RULE: Gathering needs NO designation and NO species selection — a GathererFlag
+auto-harvests ANY ready gatherable in range. But TWO things must hold or nothing
+is gathered: (1) the flag must have an ASSIGNED WORKER (it is a workplace), and
+(2) bushes must be within WALKABLE range: navmesh path distance <=20 from the
+flag's access tile (NOT a straight-line radius — a bush across water/off-path is
+out of range even if close). Place the flag central to a reachable bush cluster.
+RULE: Bushes REGROW their yield after harvest (not one-shot), so gathering is
+self-sustaining as long as bushes stay alive and aren't over-eaten. If berries
+still fall: check the flag is staffed and bushes are walkably within 20.
+RULE: A few gatherers on a big cluster feed the early colony; add a Farmhouse
+(carrots) for reliable food before population grows.
 
-## Trees replanting (FORESTER / PLANTING)
-RULE: A Forester replants trees so cutting is sustainable. Like cutting, planting
-may be area/species-based (a planting designation or a ranged flag) — set the
-planting area/species if trees don't appear. Foresters cost planks/science (not a
-day-1 build); run wild trees first, add a Forester by cycle 2.
+## Trees replanting (FORESTER / PLANTING) — needs designate_planting
+RULE: A Forester does NOT auto-plant. You must DESIGNATE planting spots, exactly
+like cutting: action `designate_planting` with tiles + species (template name like
+"Pine"/"Birch"). A tile is plantable only if MARKED + soil is MOIST (see /map
+moist[]) + not contaminated + empty + walkably in the forester's range (<=20).
+RULE: Sustainable wood loop = Lumberjack cuts designated trees (depletes forest) +
+Forester replants designated moist tiles. Add the Forester by cycle 2 (it costs
+planks/science); run wild trees first.
 
 ## The bootstrap consequence
 RULE: The very first productive act is: LumberjackFlag (free) + designate_cutting
