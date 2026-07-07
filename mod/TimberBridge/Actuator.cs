@@ -160,9 +160,12 @@ namespace TimberBridge {
 
     // Number of Path construction sites AutoConnect will ever lay in one call. Hard cap
     // so a runaway BFS (e.g. a very long route hugging a lake) can't carpet the map.
-    private const int MaxPathTiles = 20;
+    private const int MaxPathTiles = 48;
     // BFS exploration cap: how many tiles we pop before giving up looking for a road.
-    private const int MaxBfsExpansion = 60;
+    // Must be large enough for a breadth-first flood to actually REACH the road: to
+    // reach Manhattan distance d, BFS pops ~2*d^2 tiles, so a road ~10 tiles away
+    // needs ~200 pops. 60 only reached buildings ~3 tiles from the DC. Cover the map.
+    private const int MaxBfsExpansion = 4000;
 
     // Lay a contiguous Path from a freshly placed building back to the district-road
     // network so the FINISHED building is connected (staffed/reachable). Runs on the
