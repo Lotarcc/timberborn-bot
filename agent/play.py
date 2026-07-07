@@ -48,6 +48,14 @@ except Exception:  # pragma: no cover - end-of-run learning is best-effort
     coach_mod = None
 
 try:
+    import discovery as discovery_mod
+except Exception:  # pragma: no cover - mechanics discovery is best-effort
+    try:
+        from agent import discovery as discovery_mod  # type: ignore
+    except Exception:  # pragma: no cover
+        discovery_mod = None
+
+try:
     from kb import lookup as kb_lookup
 except Exception:  # pragma: no cover - import path depends on invocation style
     try:
@@ -150,26 +158,27 @@ MAX_CONSECUTIVE_ERRORS = 4
 # ~1.5-2k tokens so it fits comfortably in the 16k context.
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
-You operate a Timberborn colony through the bridge. Each turn you receive STATE
-with ALERTS, a PLANNER block, KB rules, optional VISION, and recent Action results.
+You operate a Timberborn colony through the bridge. Each turn you receive STATE,
+RESOURCES, PLANNER, KB rules, optional VISION, recent Action results, and OBSERVED
+effects from the last action.
 
-Contract:
-- ALERTS are triage truth. Fix severe survival/pathing alerts before expansion.
-- PLANNER is your menu: choose actions only from its goals and candidates. Do not
+Rules:
+- Survival priority is thirst > hunger > shelter; use weather forecast tank math
+  from STATE/PLANNER before droughts or badtides.
+- Buildings auto-connect and auto-orient. Never place Path yourself for routine
+  construction; choose PLANNER building tiles and let the bridge connect them.
+- To get logs: place LumberjackFlag near mature trees, then MUST
+  designate_cutting, then advance time. A lumberjack alone yields 0 logs.
+- Gathering is automatic when a staffed GathererFlag is near ready bushes.
+- Put production on/next to resources shown in RESOURCES and PLANNER. Do not
   invent coordinates when planner candidates exist.
-- Planner candidates are pre-validated for reachability; bridge validation is
-  still final. If a result includes a suggestion, use it next turn.
-- Construction is real: place_building creates a site needing logs and build time.
-  Queue only useful sites, then set_speed to let beavers haul/build.
-- Order matters. For a building plus path stub, place the building first, then the
-  path stub. Path before the served building is wrong for this queue.
-- Include set_speed as the LAST action when construction should proceed or the
-  planner says to advance time.
-- Demolish unreachable buildings when planner says so.
+- Advance time after queuing construction or production designations so beavers
+  build, haul, cut, pump, and gather.
+- Use OBSERVED effects to learn what worked last turn and adapt.
 
-Actions: set_speed, place_building, demolish, set_priority, save, noop.
-Return only JSON matching the schema: {"plan": string, "actions": [1 to 8 action
-objects]}, where each action object is {"action": string, "args": object}.
+Actions: set_speed, place_building, demolish, set_priority, designate_cutting,
+designate_planting, save, noop. Return only JSON matching the schema:
+{"plan": string, "actions": [1 to 8 {"action": string, "args": object}]}.
 """
 
 
@@ -197,6 +206,8 @@ ACTION_SCHEMA = {
                             "place_building",
                             "demolish",
                             "set_priority",
+                            "designate_cutting",
+                            "designate_planting",
                             "save",
                             "noop",
                         ],
@@ -269,6 +280,8 @@ ACTION_TO_ACT = {
     "place_building": ("place_building", _normalize_place_args),
     "demolish": ("demolish", _normalize_coords),
     "set_priority": ("set_priority", _normalize_coords),
+    "designate_cutting": ("designate_cutting", lambda a: dict(a or {}) or {"all": True}),
+    "designate_planting": ("designate_planting", lambda a: dict(a or {})),
     "save": ("save", lambda a: {"name": a.get("name", "agent")}),
 }
 
@@ -288,6 +301,9 @@ class Bridge:
 
     def map(self):
         return http_json("GET", self.base + "/map", timeout=BRIDGE_TIMEOUT)
+
+    def resources(self):
+        return http_json("GET", self.base + "/resources", timeout=BRIDGE_TIMEOUT)
 
     def act(self, command, args):
         body = {"command": command, "args": args}
@@ -429,6 +445,73 @@ def compact_state(state):
                 )
 
     return "CURRENT STATE:\n" + "\n".join(lines)
+
+
+def compact_resources_summary(resources, state=None):
+    if not isinstance(resources, dict) or resources.get("ok") is False:
+        return "RESOURCES DETAIL: <unavailable>"
+
+    lines = ["RESOURCES DETAIL:"]
+    counts = resources.get("counts")
+    if isinstance(counts, dict) and counts:
+        lines.append(
+            "COUNTS " + ", ".join("%s=%s" % (key, counts[key]) for key in sorted(counts))
+        )
+
+    dc = (state.get("district_center") if isinstance(state, dict) else None) or {}
+    mature = [
+        item for item in resources.get("trees", []) or []
+        if isinstance(item, dict) and item.get("mature") is True
+    ]
+    ready = [
+        item for item in resources.get("gatherables", []) or []
+        if isinstance(item, dict) and item.get("ready") is True
+    ]
+    lines.append("MATURE TREE CLUSTER " + _resource_cluster_summary(mature, dc, "mature trees"))
+    lines.append("READY BUSH CLUSTER " + _resource_cluster_summary(ready, dc, "ready gatherables"))
+    if resources.get("truncated"):
+        lines.append("TRUNCATED=true; planner used a partial resource list")
+    return "\n".join(lines)
+
+
+def _resource_cluster_summary(items, dc, label):
+    if not items:
+        return "none"
+    clusters = []
+    for anchor in items:
+        cluster = [item for item in items if _resource_distance(anchor, item) <= 8]
+        cx = round(sum(_as_float(item.get("x")) for item in cluster) / len(cluster), 1)
+        cy = round(sum(_as_float(item.get("y", item.get("z"))) for item in cluster) / len(cluster), 1)
+        species = _dominant_resource_name(cluster)
+        dist = abs(_as_float(cx) - _as_float(dc.get("x"))) + abs(
+            _as_float(cy) - _as_float(dc.get("y", dc.get("z")))
+        )
+        clusters.append((-len(cluster), dist, cx, cy, species))
+    clusters.sort()
+    count = -clusters[0][0]
+    _dist, cx, cy, species = clusters[0][1], clusters[0][2], clusters[0][3], clusters[0][4]
+    return "%s %s near x=%s y=%s (%s)" % (count, species or label, cx, cy, label)
+
+
+def _dominant_resource_name(items):
+    counts = {}
+    for item in items:
+        name = str(item.get("species") or item.get("good") or "").strip()
+        if not name:
+            continue
+        counts[name] = counts.get(name, 0) + 1
+    if not counts:
+        return ""
+    name, count = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))[0]
+    if count != 1 and not name.endswith("s"):
+        name += "s"
+    return name
+
+
+def _resource_distance(a, b):
+    return abs(_as_float(a.get("x")) - _as_float(b.get("x"))) + abs(
+        _as_float(a.get("y", a.get("z"))) - _as_float(b.get("y", b.get("z")))
+    )
 
 
 def _as_float(value, default=0.0):
@@ -936,6 +1019,13 @@ def _action_spec(action):
     return args.get("spec") or args.get("spec_id") or args.get("building") or args.get("building_type")
 
 
+def _is_lumberjack_place(action):
+    if not isinstance(action, dict) or action.get("action") != "place_building":
+        return False
+    spec = str(_action_spec(action) or "").split(".")[-1]
+    return spec == "LumberjackFlag"
+
+
 def enforce_actions(actions, report, state, journal_path=None, run_id=None, step=None):
     """Apply deterministic MVP rules to the model queue."""
     enforced = []
@@ -944,6 +1034,15 @@ def enforce_actions(actions, report, state, journal_path=None, run_id=None, step
     if report.get("advance_time_recommended") and not any(a.get("action") == "set_speed" for a in working):
         working.append({"action": "set_speed", "args": {"speed": 3}})
         enforced.append({"rule": "append_set_speed", "reason": "planner_recommended_advance_time"})
+
+    has_lumberjack = any(_is_lumberjack_place(action) for action in working)
+    has_cutting = any(action.get("action") == "designate_cutting" for action in working if isinstance(action, dict))
+    if has_lumberjack and not has_cutting:
+        for index, action in enumerate(working):
+            if _is_lumberjack_place(action):
+                working.insert(index + 1, {"action": "designate_cutting", "args": {"all": True}})
+                enforced.append({"rule": "append_designate_cutting", "reason": "lumberjack_requires_cutting_designation"})
+                break
 
     costs = getattr(planner, "COST_LOGS", None)
     logs_have = _logs_available_for_enforcement(state)
@@ -1117,6 +1216,17 @@ def compact_action_results(results):
     return "Action results:\n" + ("\n".join(lines) if lines else "none")
 
 
+def _format_observation_line(effects, action_names):
+    names = [str(name) for name in action_names or [] if name]
+    if "designate_cutting" in names:
+        cause = "designate_cutting"
+    elif names:
+        cause = ", ".join(names[:4])
+    else:
+        cause = "last action"
+    return "OBSERVED last action: %s after %s" % (", ".join(effects), cause)
+
+
 def _playbook_sort_key(lesson):
     if not isinstance(lesson, dict):
         return (0, "")
@@ -1160,6 +1270,14 @@ def run_learning_loop(journal_path, run_id):
         run_metrics["run_id"] = run_id
         metrics_mod.append_metrics_csv(run_metrics, Path(METRICS_CSV_PATH))
         proposed = coach_mod.analyze(journal, run_metrics)
+        if discovery_mod is not None:
+            try:
+                discovered = discovery_mod.distill(journal_path, run_id)
+                proposed.extend(discovered)
+                if discovered:
+                    log_stderr("discovery distilled lessons=%s" % len(discovered))
+            except Exception as e:
+                log_stderr("discovery distill failed: %s" % e)
         coach_mod.update_playbook(Path(PLAYBOOK_PATH), proposed, run_id)
         log_stderr(
             "learning loop complete: score=%s lessons=%s"
@@ -1200,6 +1318,7 @@ def run(cfg, run_id, max_steps):
 
     # Rolling chat history (after the system prompt). We keep it short.
     history = []
+    pending_observation = None
     consecutive_errors = 0
     # Most recent screenshot critique; refreshed every VISION_EVERY steps and
     # reused on the steps in between (a VLM call is slow + swaps the GPU model).
@@ -1230,13 +1349,46 @@ def run(cfg, run_id, max_steps):
 
             state_block = compact_state(state)
 
+            if pending_observation and discovery_mod is not None:
+                try:
+                    effects = discovery_mod.observe_step(
+                        pending_observation.get("before") or {},
+                        pending_observation.get("action_names") or [],
+                        state_summary_for_journal(state),
+                    )
+                    if effects:
+                        observation = _format_observation_line(
+                            effects, pending_observation.get("action_names") or []
+                        )
+                        history.append({"role": "user", "content": observation})
+                        journal_append(
+                            journal_path,
+                            {
+                                "run_id": run_id,
+                                "step": step,
+                                "event": "observed",
+                                "effects": effects,
+                                "action_names": pending_observation.get("action_names") or [],
+                            },
+                        )
+                    pending_observation = None
+                except Exception as e:
+                    log_stderr("step %d: discovery observe failed: %s" % (step, e))
+                    pending_observation = None
+
             mstatus, map_data = bridge.map()
             if mstatus != 200:
                 map_data = {}
                 log_stderr("step %d: /map unavailable (status=%s); continuing" % (step, mstatus))
 
+            rstatus, resources_data = bridge.resources()
+            if rstatus != 200 or not isinstance(resources_data, dict) or resources_data.get("ok") is False:
+                resources_data = None
+                log_stderr("step %d: /resources unavailable (status=%s); continuing" % (step, rstatus))
+            resources_block = compact_resources_summary(resources_data, state)
+
             buildings_detail = ((state.get("buildings") or {}).get("list") if isinstance(state, dict) else None)
-            report = planner.plan_report(state, map_data, buildings_detail)
+            report = planner.plan_report(state, map_data, buildings_detail, resources=resources_data)
             goals = report.get("goals") or []
             top_goal_id = goals[0].get("id") if goals and isinstance(goals[0], dict) else None
             planner_block = report.get("text") or "PLANNER: <unavailable>"
@@ -1262,6 +1414,8 @@ def run(cfg, run_id, max_steps):
                 "role": "user",
                 "content": (
                     state_block
+                    + "\n\n"
+                    + resources_block
                     + "\n\n"
                     + planner_block
                     + "\n\n"
@@ -1307,6 +1461,14 @@ def run(cfg, run_id, max_steps):
 
             exec_result = execute_action_queue(bridge, actions)
             action_results = exec_result.get("results") or []
+            pending_observation = {
+                "before": state_summary_for_journal(state),
+                "action_names": [
+                    str(action.get("action"))
+                    for action in actions
+                    if isinstance(action, dict) and action.get("action")
+                ],
+            }
 
             # --- 4. Interpret the action result ----------------------------
             ok_count = sum(1 for item in action_results if item.get("ok") is True)

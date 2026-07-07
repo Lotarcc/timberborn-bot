@@ -17,6 +17,7 @@ class PlannerTests(unittest.TestCase):
     def setUp(self):
         self.state = load_fixture("state_fresh.json")
         self.map_data = load_fixture("map_fresh.json")
+        self.resources = load_fixture("resources_fresh.json")
 
     def test_fresh_colony_goal_order_starts_with_lumberjack(self):
         goals = planner.analyze(self.state, self.map_data)
@@ -53,6 +54,46 @@ class PlannerTests(unittest.TestCase):
         report = planner.plan_report(self.state, self.map_data)
 
         self.assertLessEqual(len(report["text"].splitlines()), 25)
+
+    def test_lumberjack_uses_resource_cluster_and_followup_cutting(self):
+        report = planner.plan_report(self.state, self.map_data, resources=self.resources)
+        candidates = report["candidates_by_goal"]["build_lumberjack"]
+        first = candidates[0]
+
+        self.assertEqual((first["x"], first["y"], first["z"]), (12, 18, 4))
+        self.assertIn("near 12 mature Pines", first["why"])
+        self.assertEqual(
+            report["followups"]["build_lumberjack"],
+            [{"action": "designate_cutting", "args": {"all": True}}],
+        )
+        self.assertIn("followup=designate_cutting", report["text"])
+
+    def test_forester_goal_has_planting_followup_when_unlocked(self):
+        state = json.loads(json.dumps(self.state))
+        state["buildings"]["counts"].update(
+            {
+                "LumberjackFlag": 1,
+                "WaterPump": 1,
+                "SmallTank": 4,
+                "GathererFlag": 1,
+                "EfficientFarmhouse": 1,
+                "SmallWarehouse": 1,
+                "Inventor": 1,
+            }
+        )
+        state["population"]["homeless"] = 0
+        for resource in state["resources"]:
+            if resource["good"] in ("Water", "Food", "Berries"):
+                resource["days_remaining"] = 99
+
+        report = planner.plan_report(state, self.map_data, resources=self.resources)
+
+        self.assertIn("build_forester", [goal["id"] for goal in report["goals"]])
+        self.assertIn("build_forester", report["followups"])
+        followup = report["followups"]["build_forester"][0]
+        self.assertEqual(followup["action"], "designate_planting")
+        self.assertEqual(followup["args"]["species"], "Pine")
+        self.assertGreater(len(followup["args"]["tiles"]), 0)
 
 
 if __name__ == "__main__":

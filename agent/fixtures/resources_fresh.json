@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "counts": {
+    "Berries": 6,
+    "Pine": 12
+  },
+  "trees": [
+    {"x": 8, "y": 17, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 8, "y": 18, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 8, "y": 19, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 9, "y": 17, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 9, "y": 18, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 9, "y": 19, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 10, "y": 17, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 10, "y": 18, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 10, "y": 19, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 11, "y": 17, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 11, "y": 18, "z": 4, "species": "Pine", "good": "Log", "mature": true},
+    {"x": 11, "y": 19, "z": 4, "species": "Pine", "good": "Log", "mature": true}
+  ],
+  "gatherables": [
+    {"x": 19, "y": 20, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true},
+    {"x": 20, "y": 20, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true},
+    {"x": 21, "y": 20, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true},
+    {"x": 19, "y": 22, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true},
+    {"x": 20, "y": 22, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true},
+    {"x": 21, "y": 22, "z": 4, "species": "BlueberryBush", "good": "Berries", "ready": true}
+  ],
+  "truncated": false
+}
