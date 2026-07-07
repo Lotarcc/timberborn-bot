@@ -185,61 +185,98 @@ def distill(journal, run_id: str | None = None) -> list[dict]:
     if len(steps) < 2:
         return []
 
-    # Tally (action -> effect-key -> net signed magnitude + observation count).
-    tally: dict[tuple[str, str], dict[str, float]] = {}
-
-    def bump(action: str, effect_key: str, delta: float):
-        rec = tally.setdefault((action, effect_key), {"net": 0.0, "n": 0.0, "pos": 0.0, "neg": 0.0})
-        rec["net"] += delta
-        rec["n"] += 1
-        if delta > 0:
-            rec["pos"] += 1
-        elif delta < 0:
-            rec["neg"] += 1
-
+    # Per step: which actions fired, and which signed effects were observed. We then
+    # attribute an effect to an action only if the effect is SPECIFIC to it — much
+    # more likely in steps WITH the action than WITHOUT (lift). This is what stops a
+    # background flow (e.g. logs rising every step from an already-running lumberjack)
+    # from being falsely credited to whatever unrelated action shared that step.
+    transitions = []  # list of (set(actions), dict(effect_key -> signed delta))
     for a, b in zip(steps, steps[1:]):
-        before, after = a["state"], b["state"]
-        names = _action_names(a)
+        names = set(_action_names(a))
         if not names:
             continue
-        rb, ra = _resources(before), _resources(after)
+        rb, ra = _resources(a["state"]), _resources(b["state"])
+        eff: dict[str, float] = {}
         for good in TRACKED_GOODS:
             d = ra.get(good, 0.0) - rb.get(good, 0.0)
             if abs(d) >= RESOURCE_EPS:
-                for nm in names:
-                    bump(nm, "good:" + good, d)
-        dh = _homeless(after) - _homeless(before)
+                eff["good:" + good + (":up" if d > 0 else ":down")] = d
+        dh = _homeless(b["state"]) - _homeless(a["state"])
         if abs(dh) >= 1:
-            for nm in names:
-                bump(nm, "homeless", dh)
+            eff["homeless:" + ("up" if dh > 0 else "down")] = dh
+        transitions.append((names, eff))
+
+    if len(transitions) < 1:
+        return []
+    total = len(transitions)
+    all_actions = set().union(*[t[0] for t in transitions]) if transitions else set()
+    all_effects = set().union(*[set(t[1].keys()) for t in transitions]) if transitions else set()
 
     lessons: list[dict] = []
-    for (action, effect_key), rec in tally.items():
-        n = rec["n"]
-        if n < 1:
-            continue
-        net = rec["net"]
-        # consistent direction => a mechanic worth remembering
-        consistent = (rec["pos"] == 0 or rec["neg"] == 0)
-        if effect_key.startswith("good:"):
-            good = effect_key.split(":", 1)[1]
-            direction = "raises" if net > 0 else "lowers"
-            if direction == "raises" and consistent:
-                lessons.append(_mech_lesson(
-                    action, good, "raises", net, n, run_id,
-                    outcome="%s produces %s (observed +%d over %d steps) — use it to build %s stock"
-                            % (action, good, int(round(net)), int(n), good)))
-            elif direction == "lowers" and action.startswith("place:") and consistent:
-                # placing something that consumes a good (construction) — informative
-                lessons.append(_mech_lesson(
-                    action, good, "consumes", net, n, run_id,
-                    outcome="%s consumes %s (%d over %d steps) — ensure %s stock before placing"
-                            % (action, good, int(round(net)), int(n), good)))
-        elif effect_key == "homeless" and net < 0 and consistent:
-            lessons.append(_mech_lesson(
-                action, "homeless", "reduces", net, n, run_id,
-                outcome="%s reduces homelessness (%d) — build it to house beavers" % (action, int(round(net)))))
+    for effect_key in all_effects:
+        base_rate = sum(1 for _, e in transitions if effect_key in e) / total
+        for action in all_actions:
+            with_a = [e for names, e in transitions if action in names]
+            if len(with_a) < 1:
+                continue
+            hits = [e[effect_key] for e in with_a if effect_key in e]
+            if len(hits) < 1:
+                continue
+            precision = len(hits) / len(with_a)          # how often the effect follows this action
+            lift = precision / base_rate if base_rate > 0 else 999.0
+            # Specificity: the effect should follow this action at least as often as
+            # its background rate. The stronger correctness guard is the plausibility
+            # gate in _lesson_for (a pump can't be credited with producing logs).
+            if precision < 0.5 or lift < 1.0:
+                continue
+            net = sum(hits)
+            lesson = _lesson_for(action, effect_key, net, len(hits), run_id)
+            if lesson:
+                lessons.append(lesson)
     return lessons
+
+
+# Which action families can PRODUCE each good — a raise is only credited to a
+# plausible producer, so a coincidental co-occurrence (pump placed while the
+# lumberjack's logs happened to tick up) is never learned as "pump makes logs".
+_PRODUCERS = {
+    "Log": ("designate_cutting", "lumberjack", "forester"),
+    "Water": ("pump",),
+    "Berries": ("gather", "farm"),
+    "Food": ("gather", "farm"),
+    "Carrots": ("gather", "farm"),
+    "Potatoes": ("gather", "farm"),
+    "Plank": ("mill", "lumbermill"),
+}
+
+
+def _plausible_producer(action: str, good: str) -> bool:
+    keys = _PRODUCERS.get(good)
+    if not keys:
+        return False
+    a = action.lower()
+    return any(k in a for k in keys)
+
+
+def _lesson_for(action, effect_key, net, n, run_id):
+    if effect_key.startswith("good:"):
+        _, good, direction = effect_key.split(":")
+        if direction == "up":
+            if not _plausible_producer(action, good):
+                return None  # correctness: don't credit an implausible producer
+            return _mech_lesson(action, good, "raises", net, n, run_id,
+                outcome="%s reliably raises %s (+%d over %d obs) — use it to produce %s"
+                        % (action, good, int(round(net)), n, good))
+        if action.startswith("place:"):
+            return _mech_lesson(action, good, "consumes", net, n, run_id,
+                outcome="%s costs %s (%d over %d obs) — keep %s in stock before placing it"
+                        % (action, good, int(round(net)), n, good))
+        return None
+    if effect_key == "homeless:down":
+        return _mech_lesson(action, "homeless", "reduces", net, n, run_id,
+            outcome="%s reduces homelessness (%d over %d obs) — build it to house beavers"
+                    % (action, int(round(net)), n))
+    return None
 
 
 def _mech_lesson(action, target, verb, net, n, run_id, outcome):

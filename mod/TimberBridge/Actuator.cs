@@ -449,7 +449,13 @@ namespace TimberBridge {
           if (laid.Count >= MaxPathTiles) break;
           if (HasPathAt(tile)) continue;                 // already a path here (still contiguous)
           if (!CanPave(pathSpec, tile)) continue;        // re-validate before creating
-          _blockFactory.CreateUnfinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+          // Lay the connector path FINISHED, not as a site. Paths are free (0
+          // materials); if they were construction sites the building's access
+          // wouldn't be on a road until a beaver walked out and built each one,
+          // during which the building reads unreachable and the agent demolishes
+          // it. Instant paths make the placement reachable immediately. The
+          // BUILDING itself still costs logs and stays a construction site.
+          _blockFactory.CreateFinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
           laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
         }
 
