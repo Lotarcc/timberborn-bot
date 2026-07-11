@@ -26,6 +26,10 @@ from agent.nlp.policy import DecisionPolicy
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Max buildings under construction at once. Beyond this, stop placing new buildings so
+# beavers finish current sites first (prevents the build-spam / path-sprawl loop).
+MAX_ACTIVE_SITES = 3
+
 
 def _int(v, d=0):
     try:
@@ -55,9 +59,18 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
     goals_by_id = {g.get("id"): g for g in report.get("goals", []) if isinstance(g, dict)}
     followups = report.get("followups", {}) or {}
 
+    # Don't pile up buildings the colony can't build yet. If enough sites are already under
+    # construction, stop placing more (they'd sit unbuilt and drag redundant paths) - let
+    # beavers finish current work first. This kills the build_lodge/pump spam loop.
+    sites = sum(1 for b in ((state.get("buildings") or {}).get("list") or [])
+                if isinstance(b, dict) and b.get("status") == "site")
+    at_site_cap = sites >= MAX_ACTIVE_SITES
+
     for goal_id, conf in ranked:
         if goal_id == "advance_time":
             return "advance_time", conf, False
+        if at_site_cap and goal_id.startswith("build_"):
+            continue  # too many sites pending; skip builds (fall through to advance_time)
         if goal_id == "demolish_unreachable":
             target = _find_unreachable(state)
             if target is None:

@@ -69,15 +69,28 @@ def _onroad_tiles(map_data: dict) -> List[Tile]:
     return out
 
 
+def _existing_path_tiles(state: dict) -> List[Tile]:
+    """Every Path/Platform already placed - built OR still a construction site. These must
+    seed the network so the planner REUSES them; otherwise unbuilt path sites (not yet on
+    the road) are invisible to it and it re-routes each cycle, paving redundant parallel
+    paths that pile into a grid (the 'too many paths' bug)."""
+    out: List[Tile] = []
+    for b in ((state.get("buildings") or {}).get("list") or []):
+        if str(b.get("spec", "")).startswith(("Path", "Platform")):
+            out.append((b["x"], b["y"], b["z"]))
+    return out
+
+
 def plan(state: dict, map_data: dict) -> dict:
-    """Plan the trunk network rooted at the DC entrance (+ existing road), covering every
-    building access tile. Returns path_network.plan_network's dict."""
+    """Plan the trunk network rooted at the DC entrance (+ existing road + existing paths),
+    covering every building access tile. Returns path_network.plan_network's dict."""
     entrance = _dc_entrance(state)
     accesses = _building_accesses(state)
     seed: List[Tile] = []
     if entrance:
         seed.append(entrance)
     seed.extend(_onroad_tiles(map_data))
+    seed.extend(_existing_path_tiles(state))  # reuse built AND unbuilt paths
     if not seed:
         return {"paths": [], "unreachable": accesses, "total_tiles": 0}
     return PN.plan_network(map_data, seed, accesses)
