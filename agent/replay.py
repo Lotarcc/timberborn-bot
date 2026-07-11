@@ -23,6 +23,15 @@ import os
 import unittest
 import uuid
 
+# `agent/` has no __init__.py, and this module is designed to run standalone
+# (`python3 agent/replay.py`) as well as via package-qualified imports, so try the
+# package-relative import first and fall back to the bare sibling import that
+# resolves when sys.path[0] is agent/ itself (prefer `.venv/bin/python` either way).
+try:
+    from agent import game_schema
+except ImportError:
+    import game_schema
+
 _AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.join(_AGENT_DIR, "data")
 _RUNS_DIR = os.path.join(_AGENT_DIR, "runs")
@@ -163,6 +172,7 @@ def record_step(run_id, step, state, action, meta=None):
         "log_stored": _resource_field(state, "Log", "stored", 0.0),
         "plank_stored": _resource_field(state, "Plank", "stored", 0.0),
         "building_counts": _building_counts(state),
+        "features": game_schema.feature_strings(state),
         "action": action,
         "meta": meta,
     }
@@ -374,6 +384,7 @@ def credit_assignment(run_id, lookback=6):
         entries.append({
             "step": row.get("step"),
             "state_snapshot": {key: row.get(key) for key in _SNAPSHOT_FIELDS},
+            "features": row.get("features") or [],
             "chosen_action": row.get("action"),
             "better_action": better_action,
             "reason": reason,
@@ -441,7 +452,7 @@ class ReplayTests(unittest.TestCase):
             {
                 "step", "day", "hour", "pop_total", "homeless", "water_days",
                 "food_days", "log_stored", "plank_stored", "building_counts",
-                "action", "meta",
+                "features", "action", "meta",
             },
         )
         self.assertEqual(row["step"], 1)
@@ -454,6 +465,8 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(row["log_stored"], 0)
         self.assertEqual(row["plank_stored"], 0)
         self.assertEqual(row["building_counts"], {"DistrictCenter.Folktails": 1})
+        self.assertEqual(row["features"], game_schema.feature_strings(state))
+        self.assertTrue(row["features"])
         self.assertEqual(row["action"], "advance_time")
         self.assertEqual(row["meta"], {"note": "boot"})
 
