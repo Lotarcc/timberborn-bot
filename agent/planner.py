@@ -248,10 +248,18 @@ def analyze(state, map_data, buildings_detail=None):
 
 
 def _append_production_chain_goals(goals, state):
-    """Append Task-3a producer goals for demanded-but-unproduced goods.
+    """Append Task-3a producer goals, GATED by 3b tech progression.
 
-    Thin emit loop: economy.producer_plan does the chain reasoning and raw->refined
-    ordering; here we just turn each producer spec into a goal whose id is the real
+    3a is intentionally eager: economy.producer_plan wants the whole
+    construction-material industry even when most of it is still science-locked.
+    3b filters those goals through economy.unlockable_now, so a science-gated
+    producer is emitted only once it is actually unlockable (enough stored science
+    + prerequisites met). Non-science-locked producers (e.g. the start-tier Lumber
+    Mill) pass straight through, preserving 3a behavior. The still-locked-but-wanted
+    producers instead drive science (see _append_science_scaling_goals).
+
+    economy.producer_plan still does the chain reasoning and raw->refined ordering;
+    here we just turn each unlockable producer spec into a goal whose id is the real
     game_schema action (build_<snake>) with the log cost sourced from buildings.json.
     De-dups against goals already emitted, including bootstrap goals that target the
     same building under a different id (e.g. build_lumberjack -> LumberjackFlag).
@@ -268,10 +276,31 @@ def _append_production_chain_goals(goals, state):
                 covered.add(action)
 
     logs_have = _logs_available(state)
+    unlockable = set(economy.unlockable_now(state))
+
+    emittable = []      # (goal_id, item) for producers buildable NOW given tech
+    suppressed = []     # items wanted but still science-locked
     for item in economy.producer_plan(state):
         goal_id = game_schema.spec_to_action(item["spec"])
-        if not goal_id or goal_id in covered:
-            continue  # not a gameplay action, or already covered by another goal
+        if not goal_id:
+            continue  # not a gameplay action
+        if item["spec"] in unlockable:
+            emittable.append((goal_id, item))
+        else:
+            suppressed.append(item)
+
+    # Raw->refined (chain depth) primary; recommended_order is the tiebreak among
+    # available science-gated goals; spec breaks any remaining tie for determinism.
+    emittable.sort(
+        key=lambda gi: (
+            gi[1]["depth"],
+            economy.recommended_index(gi[1]["spec"]),
+            gi[1]["spec"],
+        )
+    )
+    for goal_id, item in emittable:
+        if goal_id in covered:
+            continue  # already covered by another goal
         covered.add(goal_id)
         goals.append(
             _goal(
@@ -282,6 +311,72 @@ def _append_production_chain_goals(goals, state):
                 cost_logs=item["cost_logs"],
             )
         )
+
+    _append_science_scaling_goals(goals, state, covered, suppressed, logs_have)
+
+
+def _append_science_scaling_goals(goals, state, covered, suppressed, logs_have):
+    """Drive/scale science when it is the bottleneck for wanted producers.
+
+    "Bottleneck" == there exist wanted-but-science-locked producers AND current
+    stored science is below the cheapest one's unlock cost. The bootstrap already
+    emits build_inventor when Inventor==0 (that IS the science driver), so we never
+    duplicate it. Once an Inventor exists we SCALE science: build_observatory when
+    it is itself unlockable (the high-throughput science building), else a 2nd
+    Inventor. Additive: emits nothing when science is not the gate.
+    """
+    if economy is None or game_schema is None or not suppressed:
+        return
+
+    costs = [economy.science_cost(item["spec"]) for item in suppressed]
+    costs = [c for c in costs if c > 0]
+    if not costs:
+        return  # suppressed for a non-science reason; more science won't help
+
+    needed = min(costs)
+    stored = economy.stored_science(state)
+    if stored >= needed:
+        return  # cheapest wanted unlock already affordable; science isn't the gate
+
+    inventor_id = game_schema.spec_to_action("Inventor")
+    if not inventor_id or inventor_id in covered:
+        return  # bootstrap already emits build_inventor (Inventor==0); don't duplicate
+
+    why = (
+        "science gates %d wanted producer(s) (need >= %d SP, have %d); scale science"
+        % (len(suppressed), int(needed), int(stored))
+    )
+
+    unlockable = set(economy.unlockable_now(state))
+    observatory_id = game_schema.spec_to_action("Observatory")
+    if (
+        observatory_id
+        and observatory_id not in covered
+        and "Observatory" in unlockable
+        and _building_count(state, "Observatory") <= 0
+    ):
+        covered.add(observatory_id)
+        goals.append(
+            _goal(
+                observatory_id,
+                why + " (Observatory: high-throughput science)",
+                spec="Observatory",
+                logs_have=logs_have,
+                cost_logs=economy.log_cost("Observatory"),
+            )
+        )
+        return
+
+    covered.add(inventor_id)
+    goals.append(
+        _goal(
+            inventor_id,
+            why + " (2nd Inventor)",
+            spec="Inventor",
+            logs_have=logs_have,
+            cost_logs=economy.log_cost("Inventor"),
+        )
+    )
 
 
 def reachable_tiles(map_data, start_xy):
