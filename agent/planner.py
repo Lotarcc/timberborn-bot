@@ -793,6 +793,9 @@ def _lumberjack_resource_candidates(arrays, dc, resources, road_reachable, block
     if not mature:
         return []  # nothing to cut; fall back to generic candidates
     species, total = _dominant_species(mature, "Tree")
+    # Cutting is GLOBAL and the flag has a large harvest radius, so the flag does NOT need to
+    # sit by the forest - the worker walking out to cut is expected and fine. Keep it on
+    # clear reachable land nearest the DC (trivial to connect + staff).
     candidates = []
     for tile in _candidate_land_tiles(arrays, road_reachable, blocked):
         candidate = _candidate(
@@ -861,6 +864,25 @@ def _candidate_land_tiles(arrays, road_reachable, blocked):
                 continue
             key = (tile["x"], tile["y"])
             if key not in road_reachable or key in blocked:
+                continue
+            if _array_value(arrays["on_road"], row * arrays["width"] + col, 0):
+                continue
+            if tile["occupied"] or tile["contamination"] > 0 or not _is_land(tile):
+                continue
+            yield tile
+
+
+def _clear_land_tiles(arrays, blocked):
+    """Clear, buildable land tiles WITHOUT the road-reachable restriction - used when the
+    agent trunk will connect a far placement (e.g. a lumberjack at the forest edge). Same
+    clear-land test as _candidate_land_tiles minus the road_reachable membership."""
+    for row in range(arrays["height"]):
+        for col in range(arrays["width"]):
+            tile = _tile(arrays, col, row)
+            if tile is None:
+                continue
+            key = (tile["x"], tile["y"])
+            if key in blocked:
                 continue
             if _array_value(arrays["on_road"], row * arrays["width"] + col, 0):
                 continue
