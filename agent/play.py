@@ -221,6 +221,11 @@ ACTION_SCHEMA = {
     "required": ["plan", "actions"],
 }
 
+ARBITER_SYSTEM_PROMPT = """\
+You arbitrate a Timberborn planner fork. Choose exactly one enumerated option.
+Return its ordered goal_ids and a brief reason. Never propose actions or coordinates.
+"""
+
 # Map each action name -> the /act command string the bridge expects, plus how to
 # turn the model's args into the command's args object.
 def _normalize_coords(a):
@@ -318,11 +323,11 @@ class Ollama:
         self.base = base_url.rstrip("/")
         self.model = model
 
-    def chat(self, messages):
+    def chat(self, messages, schema=None):
         body = {
             "model": self.model,
             "messages": messages,
-            "format": ACTION_SCHEMA,
+            "format": schema or ACTION_SCHEMA,
             "stream": False,
             "options": {"temperature": 0.2, "num_ctx": 16384},
         }
@@ -1000,15 +1005,135 @@ def parse_action_message(message):
     return {"plan": plan, "actions": normalized, "raw": raw}
 
 
+def _arbiter_options(report, pending_forks=None):
+    if pending_forks:
+        route_goals = [
+            str(goal.get("id"))
+            for goal in (report.get("goals", []) if isinstance(report, dict) else []) or []
+            if isinstance(goal, dict)
+            and str(goal.get("id", "")).startswith("demolish_unreachable")
+        ]
+        options = [{"id": "route-hold", "goal_ids": []}]
+        for index, goal_id in enumerate(route_goals[:15], start=1):
+            options.append({"id": "route-%s" % index, "goal_ids": [goal_id]})
+        return options
+
+    fork = report.get("decision_fork") if isinstance(report, dict) else None
+    options = fork.get("options") if isinstance(fork, dict) else None
+    if isinstance(options, list) and options:
+        return [
+            {
+                "id": str(option.get("id")),
+                "goal_ids": [str(goal_id) for goal_id in option.get("goal_ids", [])],
+                **({"cost_logs": option.get("cost_logs")} if option.get("cost_logs") is not None else {}),
+            }
+            for option in options[:16]
+            if isinstance(option, dict) and option.get("id")
+        ]
+
+    goal_ids = [
+        str(goal.get("id"))
+        for goal in (report.get("goals", []) if isinstance(report, dict) else []) or []
+        if isinstance(goal, dict) and goal.get("id") and goal.get("id") != "advance_time"
+    ]
+    fallback = [{"id": "hold", "goal_ids": []}]
+    for index, goal_id in enumerate(goal_ids[:15], start=1):
+        fallback.append({"id": "goal-%s" % index, "goal_ids": [goal_id]})
+    return fallback
+
+
+def _arbiter_schema(options):
+    option_ids = [option["id"] for option in options]
+    goal_ids = sorted({goal_id for option in options for goal_id in option["goal_ids"]})
+    goal_items = {"type": "string"}
+    if goal_ids:
+        goal_items["enum"] = goal_ids
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "option_id": {"type": "string", "enum": option_ids},
+            "goal_ids": {
+                "type": "array",
+                "items": goal_items,
+                "maxItems": max(len(goal_ids), 1),
+            },
+            "why": {"type": "string"},
+        },
+        "required": ["option_id", "goal_ids", "why"],
+    }
+
+
+def _parse_arbiter_message(message):
+    content = (message or {}).get("content", "")
+    raw = content if isinstance(content, str) else json.dumps(content, default=str)
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        block = first_json_object_block(raw)
+        try:
+            parsed = json.loads(block) if block else None
+        except Exception:
+            parsed = None
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def arbitrate_planner_fork(ollama, report, state, pending_forks=None, vision=None):
+    """Return one validated choice among planner-enumerated goal subsets."""
+    options = _arbiter_options(report, pending_forks=pending_forks)
+    by_id = {option["id"]: option for option in options}
+    weather = (state.get("weather", {}) if isinstance(state, dict) else {}) or {}
+    resources = {}
+    for item in (state.get("resources", []) if isinstance(state, dict) else []) or []:
+        if isinstance(item, dict) and item.get("good") in ("Log", "Plank", "Water", "Food"):
+            resources[item["good"]] = {
+                "stored": item.get("stored"),
+                "all_stock": item.get("all_stock"),
+                "days_remaining": item.get("days_remaining"),
+            }
+    prompt = {
+        "fork": report.get("decision_fork") if isinstance(report, dict) else None,
+        "pending_escalations": pending_forks or [],
+        "weather": weather,
+        "resources": resources,
+        "options": options,
+    }
+    if vision:
+        prompt["vision"] = str(vision)[:1200]
+    schema = _arbiter_schema(options)
+    message = ollama.chat(
+        [
+            {"role": "system", "content": ARBITER_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(prompt, separators=(",", ":"), default=str),
+            },
+        ],
+        schema=schema,
+    )
+    parsed = _parse_arbiter_message(message)
+    option = by_id.get(str(parsed.get("option_id")))
+    valid = option is not None and parsed.get("goal_ids") == option.get("goal_ids")
+    if not valid:
+        option = options[0]
+    return {
+        "option_id": option["id"],
+        "goal_ids": list(option["goal_ids"]),
+        "why": str(parsed.get("why") or "deterministic fallback to first option"),
+        "valid": valid,
+        "raw": (message or {}).get("content", ""),
+    }
+
+
 def _logs_available_for_enforcement(state):
     resources = _resource_by_good(state if isinstance(state, dict) else {})
     logs = resources.get("log", {})
     if not isinstance(logs, dict):
         return None
-    if logs.get("all_stock") is not None:
-        return _as_int(logs.get("all_stock"), 0)
     if logs.get("stored") is not None:
         return _as_int(logs.get("stored"), 0)
+    if logs.get("all_stock") is not None:
+        return _as_int(logs.get("all_stock"), 0)
     return None
 
 

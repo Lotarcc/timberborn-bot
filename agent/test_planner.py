@@ -38,6 +38,9 @@ class PlannerTests(unittest.TestCase):
         pump_goal = next(goal for goal in report["goals"] if goal["id"] == "build_water_pump")
 
         self.assertEqual(pump_goal["cost_logs"], 12)
+        self.assertFalse(pump_goal["free"])
+        self.assertFalse(pump_goal["affordable"])
+        self.assertFalse(pump_goal["satisfied"])
         self.assertIn("need 12 logs, have 0", pump_goal["blocked_by"])
         self.assertTrue(report["advance_time_recommended"])
         self.assertIn("ADVANCE TIME (set_speed 3, then re-check)", report["text"])
@@ -99,6 +102,52 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(followup["action"], "designate_planting")
         self.assertEqual(followup["args"]["species"], "Pine")
         self.assertGreater(len(followup["args"]["tiles"]), 0)
+
+    def test_log_contention_is_exposed_as_enumerated_decision_fork(self):
+        state = json.loads(json.dumps(self.state))
+        for resource in state["resources"]:
+            if resource["good"] == "Log":
+                resource["stored"] = 12
+                resource["all_stock"] = 12
+
+        report = planner.plan_report(
+            state, self.map_data, resources=self.resources
+        )
+
+        fork = report["decision_fork"]
+        self.assertEqual(fork["type"], "resource_contention")
+        self.assertEqual(fork["resource"], "Log")
+        self.assertEqual(fork["available"], 12)
+        self.assertIn("build_water_pump", fork["goal_ids"])
+        self.assertIn("build_lodge", fork["goal_ids"])
+        self.assertTrue(fork["options"])
+
+    def test_water_storage_goal_is_satisfied_by_target_tank_count(self):
+        state = json.loads(json.dumps(self.state))
+        state["buildings"]["counts"]["SmallTank.Folktails"] = 5
+
+        goals = planner.analyze(state, self.map_data)
+
+        self.assertNotIn("build_water_storage", [goal["id"] for goal in goals])
+
+    def test_multiple_unreachable_buildings_have_distinct_goal_ids(self):
+        buildings = [
+            {"spec": "Lodge", "x": 1, "y": 2, "z": 3, "reachable": False},
+            {"spec": "WaterPump", "x": 4, "y": 5, "z": 6, "reachable": False},
+        ]
+
+        report = planner.plan_report(
+            self.state, self.map_data, buildings_detail=buildings
+        )
+        ids = [
+            goal["id"]
+            for goal in report["goals"]
+            if goal["id"].startswith("demolish_unreachable")
+        ]
+
+        self.assertEqual(ids, ["demolish_unreachable", "demolish_unreachable_2"])
+        self.assertEqual(report["candidates_by_goal"][ids[0]], [])
+        self.assertEqual(report["candidates_by_goal"][ids[1]], [])
 
 
 if __name__ == "__main__":

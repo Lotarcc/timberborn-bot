@@ -6,6 +6,7 @@ placement candidates so the LLM chooses among valid options instead of guessing.
 """
 
 from collections import deque
+from itertools import combinations
 
 
 # Log costs used by the deterministic affordability gate.
@@ -40,6 +41,16 @@ GOAL_SPECS = {
 }
 
 
+# Simple curriculum dependencies used by the controller. A dependency is satisfied
+# when its goal is absent (the producer already exists) or was selected earlier in
+# the same frontier.
+GOAL_DEPENDENCIES = {
+    "build_water_storage": ("build_water_pump",),
+    "build_inventor": ("build_warehouse",),
+    "build_forester": ("build_warehouse", "build_inventor"),
+}
+
+
 DIRECTIONS = ((0, -1, "North"), (1, 0, "East"), (0, 1, "South"), (-1, 0, "West"))
 
 
@@ -52,12 +63,16 @@ def analyze(state, map_data, buildings_detail=None):
     state = state if isinstance(state, dict) else {}
     goals = []
 
+    unreachable_index = 0
     for building in _building_details(state, buildings_detail):
         if isinstance(building, dict) and building.get("reachable") is False:
+            unreachable_index += 1
             coords = _coords(building)
             goals.append(
                 _goal(
-                    "demolish_unreachable",
+                    "demolish_unreachable"
+                    if unreachable_index == 1
+                    else "demolish_unreachable_%s" % unreachable_index,
                     "building is not path-connected to the district center",
                     spec=building.get("spec") or building.get("spec_id"),
                     coords=coords,
@@ -83,13 +98,20 @@ def analyze(state, map_data, buildings_detail=None):
             )
         )
 
-    if _resource_days(state, "Water") < _hazard_buffer_days(state):
+    water_tanks_have = _water_storage_units(state)
+    water_tanks_target = _water_storage_target(state)
+    if (
+        _resource_days(state, "Water") < _hazard_buffer_days(state)
+        and water_tanks_have < water_tanks_target
+    ):
         goals.append(
             _goal(
                 "build_water_storage",
                 "water days remaining is below next hazard duration plus 2-day buffer",
                 spec="SmallTank",
                 logs_have=_logs_available(state),
+                current_count=water_tanks_have,
+                target_count=water_tanks_target,
             )
         )
 
@@ -215,6 +237,8 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
 
     goal_id = goal.get("id") if isinstance(goal, dict) else str(goal)
     spec = _goal_spec(goal)
+    if str(goal_id).startswith("demolish_unreachable"):
+        return []
     resource_candidates = _resource_aware_candidates(
         goal_id, spec, state, map_data, arrays, dc, reachable, resources, k
     )
@@ -250,9 +274,6 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
                 same_height = _same_height_dry_neighbors(arrays, tile)
                 if same_height >= 2:
                     candidate = _candidate(tile, "flat dry land; %s same-height dry neighbors" % same_height)
-            elif goal_id == "demolish_unreachable":
-                candidate = None
-
             if candidate is not None:
                 tiles.append(candidate)
 
@@ -279,7 +300,7 @@ def plan_report(state, map_data, buildings_detail=None, resources=None):
             alerts_local.append({"id": "blocked_by_resources", "goal": goal_id, "message": goal["blocked_by"]})
             if "advance_time" in goal["blocked_by"]:
                 advance_time = True
-        if goal_id == "demolish_unreachable":
+        if str(goal_id).startswith("demolish_unreachable"):
             alerts_local.append({"id": "building_unreachable", "message": goal.get("why", "")})
         if goal_id == "advance_time":
             advance_time = True
@@ -288,6 +309,7 @@ def plan_report(state, map_data, buildings_detail=None, resources=None):
         alerts_local.append({"id": "sites_under_construction", "message": "construction sites exist"})
         advance_time = True
 
+    decision_fork = _decision_fork(goals, candidates_by_goal, state)
     text = _report_text(goals, candidates_by_goal, advance_time, followups)
     return {
         "goals": goals,
@@ -295,20 +317,104 @@ def plan_report(state, map_data, buildings_detail=None, resources=None):
         "followups": followups,
         "alerts_local": alerts_local,
         "advance_time_recommended": advance_time,
+        "decision_fork": decision_fork,
         "text": text,
     }
 
 
-def _goal(goal_id, why, spec=None, logs_have=None, coords=None):
-    item = {"id": goal_id, "why": why}
+def _goal(
+    goal_id,
+    why,
+    spec=None,
+    logs_have=None,
+    coords=None,
+    current_count=None,
+    target_count=None,
+):
+    item = {"id": goal_id, "why": why, "satisfied": False}
     if spec:
         item["spec"] = spec
         item["cost_logs"] = COST_LOGS.get(spec, 0)
+        item["free"] = item["cost_logs"] == 0
+        item["affordable"] = item["free"] or (
+            logs_have is not None and item["cost_logs"] <= logs_have
+        )
         if logs_have is not None and item["cost_logs"] > logs_have:
             item["blocked_by"] = "need %s logs, have %s -> advance_time" % (item["cost_logs"], logs_have)
+    if current_count is not None and target_count is not None:
+        item["current_count"] = current_count
+        item["target_count"] = target_count
+        item["satisfied"] = current_count >= target_count
     if coords:
         item["coords"] = coords
     return item
+
+
+def _decision_fork(goals, candidates_by_goal, state):
+    """Describe Log contention among individually affordable, ready goals."""
+    available = _logs_available(state)
+    contenders = []
+    for goal in goals:
+        goal_id = goal.get("id")
+        cost = _as_int(goal.get("cost_logs"), 0)
+        if (
+            goal_id
+            and cost > 0
+            and goal.get("affordable") is True
+            and goal.get("satisfied") is not True
+            and candidates_by_goal.get(goal_id)
+        ):
+            contenders.append(goal)
+    required = sum(_as_int(goal.get("cost_logs"), 0) for goal in contenders)
+    if len(contenders) < 2 or required <= available:
+        return None
+
+    goal_ids_present = {goal.get("id") for goal in goals}
+    always_selected = {
+        goal.get("id")
+        for goal in goals
+        if goal.get("free") is True and candidates_by_goal.get(goal.get("id"))
+    }
+    feasible = []
+    for size in range(1, len(contenders) + 1):
+        for indexes in combinations(range(len(contenders)), size):
+            cost = sum(_as_int(contenders[index].get("cost_logs"), 0) for index in indexes)
+            option_goal_ids = {contenders[index]["id"] for index in indexes}
+            chosen_ids = always_selected.union(option_goal_ids)
+            dependencies_ready = all(
+                dependency not in goal_ids_present or dependency in chosen_ids
+                for goal_id in option_goal_ids
+                for dependency in GOAL_DEPENDENCIES.get(goal_id, ())
+            )
+            if cost <= available and dependencies_ready:
+                feasible.append((indexes, cost))
+
+    maximal = []
+    for indexes, cost in feasible:
+        chosen = set(indexes)
+        if any(chosen < set(other) for other, _other_cost in feasible):
+            continue
+        maximal.append((indexes, cost))
+    maximal.sort(key=lambda item: (item[0], item[1]))
+
+    options = []
+    for number, (indexes, cost) in enumerate(maximal[:16], start=1):
+        options.append(
+            {
+                "id": "logs-%s" % number,
+                "goal_ids": [contenders[index]["id"] for index in indexes],
+                "cost_logs": cost,
+            }
+        )
+    return {
+        "type": "resource_contention",
+        "resource": "Log",
+        "available": available,
+        "required_total": required,
+        "goal_ids": [goal["id"] for goal in contenders],
+        "options": options,
+        "options_truncated": len(maximal) > len(options),
+    }
 
 
 def _report_text(goals, candidates_by_goal, advance_time, followups=None):
@@ -371,7 +477,10 @@ def _has_urgent_unblocked_goal(goals):
         "build_lodge",
     }
     for goal in goals:
-        if goal.get("id") in urgent and not goal.get("blocked_by"):
+        if (
+            goal.get("id") in urgent
+            or str(goal.get("id", "")).startswith("demolish_unreachable")
+        ) and not goal.get("blocked_by"):
             return True
     return False
 
@@ -436,9 +545,9 @@ def _logs_available(state):
     resource = _resource(state, "Log")
     if not resource:
         return 0
-    if resource.get("all_stock") is not None:
-        return _as_int(resource.get("all_stock"), 0)
-    return _as_int(resource.get("stored"), 0)
+    if resource.get("stored") is not None:
+        return _as_int(resource.get("stored"), 0)
+    return _as_int(resource.get("all_stock"), 0)
 
 
 def _resource_days(state, good, fallback_goods=()):
@@ -448,6 +557,25 @@ def _resource_days(state, good, fallback_goods=()):
         if resource:
             return _as_float(resource.get("days_remaining"), 0.0)
     return 0.0
+
+
+def _water_storage_target(state):
+    population = max(
+        _as_int(((state.get("population") or {}).get("total")), 0)
+        if isinstance(state, dict)
+        else 0,
+        1,
+    )
+    required_water = _hazard_buffer_days(state) * 2.13 * population
+    return max(int((required_water + 29.999) // 30), 1)
+
+
+def _water_storage_units(state):
+    return (
+        _building_count(state, "SmallTank")
+        + _building_count(state, "MediumTank") * 10
+        + _building_count(state, "LargeWaterTank") * 10
+    )
 
 
 def _resource(state, good):
