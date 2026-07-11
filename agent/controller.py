@@ -733,7 +733,13 @@ def run_controller(cfg, run_id, max_cycles, bridge=None, ollama=None):
                     resources=resources,
                 )
 
-                llm_required = needs_llm(
+                # The deterministic controller can play a full game on its own: at a
+                # fork it funds goals in the planner's survival priority order and
+                # advances time when blocked. The LLM is an OPTIONAL optimizer, off by
+                # default (USE_LLM) — it was being called every cycle and just churned
+                # without unblocking anything, making runs crawl.
+                use_llm = bool(cfg.get("USE_LLM"))
+                llm_required = use_llm and needs_llm(
                     report,
                     state,
                     pending_forks=pending_forks,
@@ -931,17 +937,20 @@ def main(argv=None):
     parser.add_argument("--max-advance-days", type=float, default=DEFAULT_MAX_ADVANCE_DAYS)
     parser.add_argument("--vision-model", default=play.DEFAULTS["VISION_MODEL"])
     parser.add_argument("--vision-every", type=int, default=play.DEFAULTS["VISION_EVERY"])
+    parser.add_argument("--use-llm", action="store_true",
+                        help="Consult the LLM at genuine forks (default: fully deterministic).")
     args = parser.parse_args(argv)
     cfg = {
         "BRIDGE_URL": args.bridge_url,
         "OLLAMA_URL": args.ollama_url,
         "MODEL": args.model,
         "VISION_MODEL": args.vision_model,
-        "VISION_EVERY": args.vision_every,
+        "VISION_EVERY": args.vision_every if args.use_llm else 0,
         "RUN_SPEED": args.run_speed,
         "POLL_INTERVAL": args.poll_interval,
         "MAX_POLLS": args.max_polls,
         "MAX_ADVANCE_DAYS": args.max_advance_days,
+        "USE_LLM": args.use_llm,
     }
     run_controller(cfg, args.run_id, args.max_cycles)
 
