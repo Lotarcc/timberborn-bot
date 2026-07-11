@@ -310,5 +310,137 @@ class TechGatingTests(unittest.TestCase):
                         self.assertIn(g["id"], actions)
 
 
+class WellbeingActionSpaceTests(unittest.TestCase):
+    """3c Step 1: the curated well-being amenities are real gameplay actions."""
+
+    CURATED = [
+        "Campfire", "Shrub", "Shower", "ContemplationSpot",
+        "Lantern", "Lido", "Agora", "MudPit",
+    ]
+
+    def test_curated_amenities_are_actions(self):
+        actions = set(game_schema.actions())
+        for spec in self.CURATED:
+            goal_id = game_schema.spec_to_action(spec)
+            self.assertIsNotNone(goal_id, "amenity %r has no gameplay action" % spec)
+            self.assertIn(goal_id, actions)
+
+    def test_campfire_resolves_to_expected_id(self):
+        self.assertEqual(game_schema.spec_to_action("Campfire"), "build_campfire")
+        self.assertEqual(game_schema.spec_to_action("MudPit"), "build_mud_pit")
+
+    def test_action_space_grew_past_bootstrap_83(self):
+        # The 83-action space excluded the whole 'decoration' category; the curated
+        # amenities must have been added on top (not all 29 decorations).
+        self.assertGreater(len(game_schema.actions()), 83)
+        self.assertLess(len(game_schema.actions()), 83 + 29)
+
+
+class UncoveredWellbeingNeedsTests(unittest.TestCase):
+    """3c Step 2: cheapest curated source per uncovered decoration-only need."""
+
+    def _state(self, counts=None, science=0):
+        return {
+            "buildings": {"counts": dict(counts or {})},
+            "resources": [
+                {"good": "SciencePoints", "stored": science, "all_stock": science}
+            ],
+            "population": {"total": 10, "homeless": 0},
+        }
+
+    def test_no_amenity_built_returns_cheapest_per_need(self):
+        by = {r["need"]: r["spec"] for r in economy.uncovered_wellbeing_needs(self._state())}
+        self.assertEqual(by.get("Social Life"), "Campfire")   # sci 0
+        self.assertEqual(by.get("Aesthetics"), "Shrub")       # sci 0
+        self.assertEqual(by.get("Wet Fur"), "Shower")         # sci 50 (cheapest source)
+        self.assertEqual(by.get("Fun"), "Lido")               # sci 250 (cheapest source)
+
+    def test_campfire_built_drops_social_life(self):
+        by = {
+            r["need"]: r["spec"]
+            for r in economy.uncovered_wellbeing_needs(self._state({"Campfire.Folktails": 1}))
+        }
+        self.assertNotIn("Social Life", by)   # a curated source is built -> covered
+        self.assertIn("Aesthetics", by)       # the others are still uncovered
+
+    def test_every_source_spec_maps_to_a_valid_action(self):
+        actions = set(game_schema.actions())
+        for row in economy.uncovered_wellbeing_needs(self._state()):
+            goal_id = game_schema.spec_to_action(row["spec"])
+            self.assertIsNotNone(goal_id, "source %r has no action" % row["spec"])
+            self.assertIn(goal_id, actions)
+
+    def test_empty_state_is_safe(self):
+        self.assertIsInstance(economy.uncovered_wellbeing_needs({}), list)
+
+
+class WellbeingEmissionTests(unittest.TestCase):
+    """3c Step 3: analyze() emits housing headroom + gated amenities in GROW phase."""
+
+    def _growth_state(self, science=0, free_beds=0, counts=None):
+        c = {
+            "LumberjackFlag.Folktails": 1,
+            "WaterPump.Folktails": 1,
+            "GathererFlag.Folktails": 1,
+        }
+        c.update(counts or {})
+        return {
+            "buildings": {"counts": c},
+            "resources": [
+                {"good": "Log", "stored": 300, "all_stock": 300},
+                {"good": "Water", "stored": 100, "days_remaining": 99},
+                {"good": "Food", "stored": 100, "days_remaining": 99},
+                {"good": "SciencePoints", "stored": science, "all_stock": science},
+            ],
+            "population": {"total": 10, "homeless": 0, "free_beds": free_beds},
+        }
+
+    def test_growth_state_emits_housing_and_free_amenities(self):
+        goals = planner.analyze(self._growth_state(science=0, free_beds=0), None)
+        ids = [g["id"] for g in goals]
+        # Free-bed breeding headroom: a lodge tier so a kit has room to be born.
+        self.assertIn("build_lodge", ids)
+        # 0-science amenities emitted (Campfire=Social Life, Shrub=Aesthetics).
+        self.assertIn("build_campfire", ids)
+        self.assertIn("build_shrub", ids)
+        # Science-locked amenities are NOT emitted at 0 science (gated by 3b).
+        self.assertNotIn("build_mud_pit", ids)   # 1800 SP
+        self.assertNotIn("build_shower", ids)    # 50 SP
+
+    def test_free_beds_available_suppresses_housing_goal(self):
+        ids = [g["id"] for g in planner.analyze(self._growth_state(free_beds=3), None)]
+        self.assertNotIn("build_lodge", ids)     # room already exists; no homeless
+
+    def test_crisis_state_emits_no_amenities(self):
+        state = {
+            "buildings": {"counts": {"LumberjackFlag.Folktails": 1}},
+            "resources": [
+                {"good": "Log", "stored": 300, "all_stock": 300},
+                {"good": "Water", "stored": 0, "days_remaining": 0},
+                {"good": "Food", "stored": 0, "days_remaining": 0},
+            ],
+            "population": {"total": 10, "homeless": 0, "free_beds": 0},
+        }
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertNotIn("build_campfire", ids)
+        self.assertNotIn("build_shrub", ids)
+        self.assertNotIn("build_lodge", ids)     # survival not secure -> no growth goals
+
+    def test_enough_science_unlocks_next_amenity(self):
+        ids = [g["id"] for g in planner.analyze(self._growth_state(science=60), None)]
+        self.assertIn("build_shower", ids)       # 50 <= 60 -> now unlockable
+        self.assertIn("build_campfire", ids)     # still emitted
+
+    def test_every_emitted_goal_id_is_a_valid_action(self):
+        actions = set(game_schema.actions())
+        for sci in (0, 60, 300, 2000):
+            for fb in (0, 5):
+                goals = planner.analyze(self._growth_state(science=sci, free_beds=fb), None)
+                for g in goals:
+                    spec = g.get("spec")
+                    if spec and game_schema.spec_to_action(spec) == g["id"]:
+                        self.assertIn(g["id"], actions)
+
+
 if __name__ == "__main__":
     unittest.main()

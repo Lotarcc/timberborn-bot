@@ -35,6 +35,26 @@ _GAMEPLAY_CATEGORIES = {
 _SKIP_IDS = {"DistrictCenter", "DevPowerGenerator", "ReservePile", "ReserveTank",
              "ReserveWarehouse", "AncientAquiferDrill"}
 
+# Curated well-being amenities (Task 3c). These are category "decoration", which is
+# deliberately EXCLUDED from _GAMEPLAY_CATEGORIES so the model isn't drowned in the
+# 29 mostly-cosmetic decorations. But growth/breeding (needs.json.population_growth)
+# needs POSITIVE well-being, and the decoration-only well-being needs (Social Life,
+# Aesthetics, Wet Fur, Fun) have NO buildable source unless we surface a few. This
+# is a hand-picked set: >=1 CHEAP source per decoration-only need plus a small
+# number of scaled/higher-tier options for progression - NOT the whole category and
+# NOT pure cosmetics with no well-being need. The 3b science gate times the
+# expensive ones (Shower 50, Lido 250, Agora 300, Mud Pit 1800 SP).
+_WELLBEING_ALLOW = {
+    "Campfire",           # Social Life  (sci 0)
+    "Shrub",              # Aesthetics   (sci 0)
+    "Shower",             # Wet Fur      (sci 50)
+    "ContemplationSpot",  # Social Life  (sci 100, scaled)
+    "Lantern",            # Aesthetics   (sci 100, scaled)
+    "Lido",               # Wet Fur + Fun (sci 250, double-dips)
+    "Agora",              # Social Life  (sci 300, scaled)
+    "MudPit",             # Fun          (sci 1800, premium/gated)
+}
+
 _VERB_ACTIONS = ["designate_cutting", "designate_planting", "demolish_unreachable",
                  "advance_time"]
 
@@ -80,7 +100,7 @@ def _gameplay_specs() -> List[str]:
         spec = b["id"].split(".")[0]
         if spec in _SKIP_IDS:
             continue
-        if b.get("category") in _GAMEPLAY_CATEGORIES:
+        if b.get("category") in _GAMEPLAY_CATEGORIES or spec in _WELLBEING_ALLOW:
             specs.append(spec)
     return specs
 

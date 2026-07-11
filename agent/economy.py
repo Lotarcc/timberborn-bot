@@ -391,6 +391,57 @@ def _why(spec: str, good: str, state: dict) -> str:
     return "%s feeds a demanded production chain; build %s" % (good, spec)
 
 
+# =============================================================================
+# Well-being amenities (Task 3c): curated need -> source-building map
+# =============================================================================
+# needs.json's wellbeing_needs[].source_buildings are FREE-TEXT prose, so the
+# need->building resolution is hand-curated here against real buildings.json specs.
+# Only the DECORATION-only well-being needs live here; the rest are already covered:
+#   * Awe        -> monuments (FarmerMonument is already a build action)
+#   * Nutrition  -> food variety (food buildings are already actions)
+#   * Shelter    -> housing (emitted separately by the planner's free-bed rule)
+#   * Knowledge  -> a producer (Bookprinter), owned by the 3a production chains
+# Each value is the curated set of sources for that need; uncovered_wellbeing_needs
+# picks the CHEAPEST (science, then logs) uncovered one as the next to build. Every
+# spec here is in game_schema._WELLBEING_ALLOW so it round-trips to a build_<x>
+# action, and the planner gates each through unlockable_now (3b) before emitting.
+_WELLBEING_SOURCES: Dict[str, tuple] = {
+    "Social Life": ("Campfire", "ContemplationSpot", "Agora"),
+    "Aesthetics": ("Shrub", "Lantern"),
+    "Wet Fur": ("Shower", "Lido"),
+    "Fun": ("Lido", "MudPit"),
+}
+
+
+def _wellbeing_covered(specs, state: dict) -> bool:
+    """True when ANY curated source for a need is already built."""
+    return any(game_schema._count(state, spec) > 0 for spec in specs)
+
+
+def uncovered_wellbeing_needs(state: dict) -> List[Dict[str, str]]:
+    """For each decoration-only well-being need with NO built source, the cheapest
+    curated source spec to build next.
+
+    Returns ``[{"need", "spec"}]`` ordered by that source's cost (cheapest first:
+    lowest science_cost, then lowest log build-cost). A need is "covered" once any
+    of its curated sources is built. "Cheapest" is judged over the whole curated
+    set regardless of current science; the planner routes the chosen spec through
+    the 3b science/affordability gate, so a science-locked source (Shower 50 SP,
+    Mud Pit 1800 SP) simply is not emitted until it is actually unlockable. This
+    keeps the growth signal stable (always name the ideal cheap source) while tech
+    controls timing.
+    """
+    state = state if isinstance(state, dict) else {}
+    ranked = []
+    for need, specs in _WELLBEING_SOURCES.items():
+        if _wellbeing_covered(specs, state):
+            continue
+        cheapest = min(specs, key=lambda s: (science_cost(s), log_cost(s), s))
+        ranked.append((science_cost(cheapest), log_cost(cheapest), need, cheapest))
+    ranked.sort()
+    return [{"need": need, "spec": spec} for _sci, _log, need, spec in ranked]
+
+
 __all__ = [
     "needed_producers",
     "producer_plan",
@@ -400,6 +451,7 @@ __all__ = [
     "stored_science",
     "recommended_order",
     "recommended_index",
+    "uncovered_wellbeing_needs",
 ]
 
 

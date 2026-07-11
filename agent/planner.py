@@ -234,6 +234,7 @@ def analyze(state, map_data, buildings_detail=None):
         )
 
     _append_production_chain_goals(goals, state)
+    _append_wellbeing_goals(goals, state)
 
     if _sites_under_construction(state) and _logs_available(state) > 0 and not _has_urgent_unblocked_goal(goals):
         goals.append(
@@ -377,6 +378,94 @@ def _append_science_scaling_goals(goals, state, covered, suppressed, logs_have):
             cost_logs=economy.log_cost("Inventor"),
         )
     )
+
+
+def _survival_secure(state):
+    """True when survival needs are met, so growth investments are appropriate.
+
+    Requires a water pump AND a food source built, water AND food days-remaining at
+    or above the hazard buffer (next weather duration + 2), and nobody homeless.
+    This gates the Task-3c growth goals: well-being amenities and breeding headroom
+    are never emitted while thirst, hunger or homelessness is still unresolved.
+    Unknown/missing days read as 0, i.e. NOT secure (conservative).
+    """
+    if _building_count(state, "WaterPump") <= 0:
+        return False
+    if not _has_food_production(state):
+        return False
+    buffer = _hazard_buffer_days(state)
+    if _resource_days(state, "Water") < buffer:
+        return False
+    if _resource_days(state, "Food", fallback_goods=("Berries", "Carrot", "GrilledPotato")) < buffer:
+        return False
+    if _as_int(((state.get("population") or {}).get("homeless")), 0) > 0:
+        return False
+    return True
+
+
+def _append_wellbeing_goals(goals, state):
+    """Append Task-3c housing-headroom + well-being amenity goals (GROW phase).
+
+    Only fires when survival is SECURE (see _survival_secure): amenities and
+    breeding headroom are growth investments, never emitted during a thirst/hunger/
+    homeless crisis. Two additive emissions:
+
+    * FREE-BED HEADROOM: Folktails breeding halts with no empty bed
+      (needs.json.population_growth). The bootstrap only builds a Lodge when
+      homeless>0; here, when free_beds<=0 even with nobody homeless, we emit a lodge
+      tier so a new kit has ROOM to be born. Skipped when free_beds is unknown.
+    * WELL-BEING AMENITIES: for each uncovered decoration-only well-being need
+      (economy.uncovered_wellbeing_needs -> cheapest curated source), emit a
+      build_<amenity> goal, GATED through economy.unlockable_now exactly like the
+      3a/3b producers, so a science-locked source (Shower 50 SP, Mud Pit 1800 SP)
+      is emitted only once it is actually unlockable. The 3b science driver scales
+      science toward the still-locked ones.
+
+    De-dups against goals already emitted (including the bootstrap Lodge).
+    """
+    if economy is None or game_schema is None:
+        return
+    if not _survival_secure(state):
+        return
+
+    covered = {goal.get("id") for goal in goals}
+    logs_have = _logs_available(state)
+
+    population = (state.get("population") or {}) if isinstance(state, dict) else {}
+    free_beds = population.get("free_beds")
+    if free_beds is not None and _as_int(free_beds, 0) <= 0:
+        lodge_id = game_schema.spec_to_action("Lodge") or "build_lodge"
+        if lodge_id not in covered:
+            covered.add(lodge_id)
+            goals.append(
+                _goal(
+                    lodge_id,
+                    "no free beds: Folktails breeding needs an empty bed for a kit; add housing",
+                    spec="Lodge",
+                    logs_have=logs_have,
+                    cost_logs=economy.log_cost("Lodge"),
+                )
+            )
+
+    unlockable = set(economy.unlockable_now(state))
+    for row in economy.uncovered_wellbeing_needs(state):
+        spec = row["spec"]
+        goal_id = game_schema.spec_to_action(spec)
+        if not goal_id or goal_id in covered:
+            continue
+        if spec not in unlockable:
+            continue  # science-locked; the 3b science driver scales toward it
+        covered.add(goal_id)
+        goals.append(
+            _goal(
+                goal_id,
+                "well-being: %s has no source; %s raises well-being to speed breeding"
+                % (row["need"], spec),
+                spec=spec,
+                logs_have=logs_have,
+                cost_logs=economy.log_cost(spec),
+            )
+        )
 
 
 def reachable_tiles(map_data, start_xy):
