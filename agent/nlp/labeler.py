@@ -96,16 +96,27 @@ class Oracle:
         _to_schema_id (see module docstring) before it is returned; a translation
         that still lands outside the action space raises rather than silently
         corrupting the training data.
+
+        PERF: this calls planner.analyze() directly instead of planner.plan_report().
+        plan_report is exactly analyze() plus, per goal, a real candidates_for() map
+        scan to build candidates_by_goal/followups/alerts_local/decision_fork/text -
+        none of which this method reads (candidates_by_goal is overwritten with
+        fake_candidates below regardless, and the rest are never touched). Skipping
+        that scan is a pure speedup: analyze() is a deterministic function of
+        (state, map_data, buildings_detail), and both call sites pass the same
+        arguments (buildings_detail defaulting to None), so the `goals` list is
+        identical either way. Verified byte-identical against the plan_report-based
+        implementation across the full targeted-recipe battery, the existing
+        test_labeler_schema.py battery, and a large random-state fuzz sample before
+        landing (see the Task 5a report).
         """
-        report = planner.plan_report(state, self.map_data, resources=self.resources)
-        goals = report.get("goals") or []
+        goals = planner.analyze(state, self.map_data)
         fake_candidates = {
             goal["id"]: [{"x": i * 10, "y": 0, "z": 0}]
             for i, goal in enumerate(goals)
             if isinstance(goal, dict) and goal.get("id") and goal.get("spec")
         }
-        stable_report = dict(report)
-        stable_report["candidates_by_goal"] = fake_candidates
+        stable_report = {"goals": goals, "candidates_by_goal": fake_candidates}
         selected = set(controller.build_safe_ready_frontier(stable_report, state).get("goal_ids") or [])
 
         actions_set = set(game_schema.actions())
