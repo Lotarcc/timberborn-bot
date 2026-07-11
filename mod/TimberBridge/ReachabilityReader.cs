@@ -230,6 +230,33 @@ namespace TimberBridge {
       }
     }
 
+    // DIAGNOSTIC: why does AccessTiles return null for this object? Surfaces each step
+    // instead of swallowing it, so one live /state tells us the real cause per building
+    // (no BuildingAccessible? Accessible not set? CalculateAccess throws?). Never throws.
+    public string AccessDiag(BlockObject block) {
+      try {
+        if (block == null) return "null_block";
+        var ba = block.GetComponent<BuildingAccessible>();
+        if (ba == null) return "NO_BuildingAccessible";
+        string ent;
+        try {
+          var spec = block.GetComponent<BlockObjectSpec>();
+          ent = (spec != null && spec.Entrance.HasEntrance) ? "entrance" : "NO_entrance";
+        } catch (Exception e) { ent = "entrance_err:" + e.GetType().Name; }
+        var acc = ba.Accessible;
+        string accStr = acc == null ? "Accessible_NULL" : ("accesses=" + acc.Accesses.Count);
+        string calc;
+        try {
+          Vector3 w = ba.CalculateAccess();
+          Vector3Int t = CoordinateSystem.WorldToGridInt(w);
+          calc = "calc=(" + t.x + "," + t.y + "," + t.z + ")";
+        } catch (Exception e) { calc = "calc_ERR:" + e.GetType().Name + ":" + e.Message; }
+        return ent + "|" + accStr + "|" + calc;
+      } catch (Exception e) {
+        return "diag_exc:" + e.GetType().Name + ":" + e.Message;
+      }
+    }
+
   }
 
 }

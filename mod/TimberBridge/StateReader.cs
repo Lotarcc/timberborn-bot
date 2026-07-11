@@ -278,7 +278,8 @@ namespace TimberBridge {
           // district road for this building to be staffed/reachable (from
           // BuildingAccessible/Accessible). null for buildings without a
           // BuildingAccessible (they connect by footprint, not an access point).
-          access = ReadAccessTiles(block)
+          access = ReadAccessTiles(block),
+          access_diag = _reachability.AccessDiag(block)
         };
 
         bool finished = block.IsFinished;
@@ -443,6 +444,7 @@ namespace TimberBridge {
       public int max_workers;
       public bool reachable;   // game-truth: false => unconnected/unreachable
       public List<CoordDto> access; // access tile(s) the game requires on-road; null if none
+      public string access_diag; // DIAGNOSTIC: why access is null (temporary)
     }
 
   }

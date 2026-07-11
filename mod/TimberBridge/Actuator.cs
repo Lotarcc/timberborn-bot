@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
+using Timberborn.CameraSystem;        // CameraService                (CONFIRMED via decompile: injectable singleton)
 using Timberborn.ConstructionSites;
 using Timberborn.Coordinates;
 using Timberborn.EntitySystem;
@@ -48,6 +49,7 @@ namespace TimberBridge {
     private readonly IThreadSafeWaterMap _waterMap;
     private readonly ITerrainService _terrain;
     private readonly PlantingService _planting;
+    private readonly CameraService _camera;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -64,7 +66,8 @@ namespace TimberBridge {
                     ResourcesReader resources,
                     IThreadSafeWaterMap waterMap,
                     ITerrainService terrain,
-                    PlantingService planting) {
+                    PlantingService planting,
+                    CameraService camera) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -81,6 +84,7 @@ namespace TimberBridge {
       _waterMap = waterMap;
       _terrain = terrain;
       _planting = planting;
+      _camera = camera;
     }
 
     public string Act(string command, JObject args) {
@@ -106,6 +110,7 @@ namespace TimberBridge {
           case "designate_cutting": return DesignateCutting(args, true);
           case "undesignate_cutting": return DesignateCutting(args, false);
           case "designate_planting": return DesignatePlanting(args);
+          case "set_camera": return SetCamera(args);
           case "batch": return Batch(args);
           default: return Err("not_implemented", command);
         }
@@ -189,22 +194,30 @@ namespace TimberBridge {
       }
 
       string mode;
+      // Capture the just-created entity so AutoConnect resolves the access tile from the
+      // ACTUAL object rather than a coord re-lookup. GetBottomObjectAt(coord) returns the
+      // TERRAIN block for a relocated/sloped building (e.g. a water pump snapped to the
+      // shoreline at a lower z), whose GetComponent<BuildingAccessible> is null -> access
+      // resolves null -> AutoConnect fell back to the footprint ring and left the building
+      // short of its real access tile. The created ConstructionSite/BlockObject carries the
+      // BuildingAccessible directly (confirmed: unfinished buildings report their access).
+      BlockObject placedObject = null;
       if (spec.HasSpec<BuildingSpec>()) {
         BuildingSpec buildingSpec = spec.GetSpec<BuildingSpec>();
-        if (instant) { _construction.CreateAsFinished(buildingSpec, placement); mode = "finished"; }
-        else { _construction.CreateAsUnfinished(buildingSpec, placement); mode = "construction_site"; }
+        if (instant) { var created = _construction.CreateAsFinished(buildingSpec, placement); placedObject = created != null ? created.GetComponent<BlockObject>() : null; mode = "finished"; }
+        else { var created = _construction.CreateAsUnfinished(buildingSpec, placement); placedObject = created != null ? created.GetComponent<BlockObject>() : null; mode = "construction_site"; }
       } else {
-        if (instant) { _blockFactory.CreateFinished(spec, placement); mode = "finished"; }
-        else { _blockFactory.CreateUnfinished(spec, placement); mode = "construction_site"; }
+        if (instant) { placedObject = _blockFactory.CreateFinished(spec, placement); mode = "finished"; }
+        else { placedObject = _blockFactory.CreateUnfinished(spec, placement); mode = "construction_site"; }
       }
 
       // A finished building is only staffed/reachable if it touches the district ROAD
-      // network. Lay a Path from the building back to that network. Never fail the
-      // placement if this can't connect (report reason so the agent can bridge/dam).
-      // Only meaningful for real buildings; a placed Path is its own connection.
+      // network. Lay a Path from the building's real ACCESS tile back to that network.
+      // Never fail the placement if this can't connect (report reason so the agent can
+      // bridge/dam). Only meaningful for real buildings; a placed Path is its own connection.
       object autoConnectResult = null;
       if (autoConnect && spec.HasSpec<BuildingSpec>()) {
-        autoConnectResult = AutoConnect(coord, spec);
+        autoConnectResult = AutoConnect(placedObject, coord, spec);
       }
 
       // Report the tile+orientation ACTUALLY used (water-intake recovery may have relocated
@@ -391,16 +404,20 @@ namespace TimberBridge {
     //
     // Returns an anonymous object folded into place_building's JSON under "auto_connect":
     //   { connected:bool, paths_laid:int, path_tiles:[{x,y,z}], access_tiles?:[..], reason?:string }
-    private object AutoConnect(Vector3Int buildingCoord, BlockObjectSpec buildingSpec) {
+    private object AutoConnect(BlockObject placedObject, Vector3Int buildingCoord, BlockObjectSpec buildingSpec) {
       try {
         BlockObjectSpec pathSpec = FindSpec("Path");
         if (pathSpec == null) {
           return new { connected = false, paths_laid = 0, reason = "no_path_spec" };
         }
 
-        // Resolve the game's actual access tile(s) for the just-placed building. We need
-        // the live BlockObject to read BuildingAccessible; find it at the placed coord.
-        List<Vector3Int> accessTiles = ResolveAccessTiles(buildingCoord);
+        // Resolve the game's actual access tile(s) from the just-created object (ground
+        // truth: BuildingAccessible on the real entity). Only fall back to a coord lookup
+        // if we somehow weren't handed the object.
+        List<Vector3Int> accessTiles = placedObject != null ? _reachability.AccessTiles(placedObject) : null;
+        if (accessTiles == null || accessTiles.Count == 0) {
+          accessTiles = ResolveAccessTiles(buildingCoord);
+        }
         bool haveAccess = accessTiles != null && accessTiles.Count > 0;
 
         // The building's own footprint tiles. In access-tile mode these are IMPASSABLE
@@ -449,13 +466,14 @@ namespace TimberBridge {
           if (laid.Count >= MaxPathTiles) break;
           if (HasPathAt(tile)) continue;                 // already a path here (still contiguous)
           if (!CanPave(pathSpec, tile)) continue;        // re-validate before creating
-          // Lay the connector path FINISHED, not as a site. Paths are free (0
-          // materials); if they were construction sites the building's access
-          // wouldn't be on a road until a beaver walked out and built each one,
-          // during which the building reads unreachable and the agent demolishes
-          // it. Instant paths make the placement reachable immediately. The
-          // BUILDING itself still costs logs and stays a construction site.
-          _blockFactory.CreateFinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+          // Lay the connector path as a CONSTRUCTION SITE so it's built by beavers like
+          // everything else (user requirement). Paths are free (0 materials) and beavers
+          // build them outward from the road: the tile adjacent to the road is reachable
+          // by builders first, and each built tile makes the next reachable, so the chain
+          // completes and the building connects. (Reachability is therefore delayed until
+          // the chain is built - the agent must wait, not demolish, while paths are under
+          // construction.)
+          _blockFactory.CreateUnfinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
           laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
         }
 
@@ -722,12 +740,43 @@ namespace TimberBridge {
     }
 
     private string Demolish(int x, int y, int z) {
-      var coord = new Vector3Int(x, y, z);
-      if (!_blocks.AnyObjectAt(coord)) return Err("nothing_there", "(" + x + "," + y + "," + z + ")");
-      BlockObject obj = _blocks.GetBottomObjectAt(coord);
-      if (obj == null || !obj.CanDelete()) return Err("not_deletable", "(" + x + "," + y + "," + z + ")");
+      // A building's reported coord (e.g. a pump's water-intake tile at z-1) may not
+      // be the exact deletable block tile. Search the z-column then the 3x3
+      // neighbourhood so "remove the thing at roughly here" just works.
+      BlockObject obj = FindDeletableNear(x, y, z);
+      if (obj == null) return Err("nothing_there", "(" + x + "," + y + "," + z + ")");
+      Vector3Int at = obj.Coordinates;
       _entities.Delete(obj);
-      return Ok(new { command = "demolish", x, y, z });
+      return Ok(new { command = "demolish", x = at.x, y = at.y, z = at.z, requested = new { x, y, z } });
+    }
+
+    private BlockObject FindDeletableNear(int x, int y, int z) {
+      int[] zDeltas = { 0, 1, -1, 2, -2, 3 };
+      foreach (int dz in zDeltas) {
+        BlockObject o = DeletableAt(new Vector3Int(x, y, z + dz));
+        if (o != null) return o;
+      }
+      for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+          if (dx == 0 && dy == 0) continue;
+          foreach (int dz in zDeltas) {
+            BlockObject o = DeletableAt(new Vector3Int(x + dx, y + dy, z + dz));
+            if (o != null) return o;
+          }
+        }
+      }
+      return null;
+    }
+
+    private BlockObject DeletableAt(Vector3Int coord) {
+      if (!_blocks.AnyObjectAt(coord)) return null;
+      BlockObject obj = _blocks.GetBottomObjectAt(coord);
+      if (obj == null || !obj.CanDelete()) return null;
+      try {
+        string name = obj.GetComponent<Building>()?.Spec?.Blueprint?.Name;
+        if (name != null && name.StartsWith("DistrictCenter", StringComparison.OrdinalIgnoreCase)) return null;
+      } catch { /* no building component — a path etc, deletable */ }
+      return obj;
     }
 
     // Set builder priority on a construction site. BuilderPrioritizable is only
@@ -816,6 +865,103 @@ namespace TimberBridge {
         catch (Exception e) { Debug.LogError("[TimberBridge] plant mark failed at " + t + ": " + e); }
       }
       return Ok(new { command = "designate_planting", species, tiles = marked });
+    }
+
+    // Frame the colony for a screenshot: move the RTS camera to look at a target tile
+    // from a high, top-down-ish angle, zoomed out enough to see the whole base.
+    //
+    // Args: {x, y, z? (target tile; if x/y omitted, center on the district center),
+    //        zoom (0..1 normalized, OR a raw camera distance >1), tilt? (degrees, steep=top-down)}
+    //
+    // Camera driving (all CONFIRMED via decompile of Timberborn.CameraSystem.CameraService,
+    // a public injectable singleton — ISaveableSingleton/ILoadableSingleton/ILateUpdatableSingleton):
+    //   * void MoveTargetTo(Vector3 worldPoint)  -> sets Target (the look-at point); it
+    //     internally does WorldToGrid -> ClampTarget(map bounds) -> GridToWorld, so we must
+    //     pass a WORLD position (we convert the grid tile via CoordinateSystem.GridToWorldCentered).
+    //     CONFIRMED.
+    //   * void SetZoomLevel(float distanceFromTarget, float delta) -> converts a desired
+    //     camera-to-target distance into ZoomLevel and CLAMPS it to the active zoom limits.
+    //     Passing a huge distance saturates to the game's max zoom-out (whole-base overview),
+    //     so our distance constants need not be exact. CONFIRMED.
+    //   * float ZoomLevel { get; set; }          -> resulting zoom, read back for the report. CONFIRMED.
+    //   * float VerticalAngle { get; set; }      -> camera pitch/tilt in degrees; 90 = straight
+    //     down, ~0 = horizon. The public setter is UNCLAMPED (unlike ModifyVerticalAngle, which
+    //     clamps to VerticalAngleLimits), letting us pick a steeper top-down framing than normal
+    //     play allows. We clamp to [1,89] ourselves to avoid a degenerate straight-down flip.
+    //     CONFIRMED.
+    // The camera reads Target/ZoomLevel/VerticalAngle in its per-frame LateUpdateSingleton
+    // (UpdatePositionAndRotation), so the change takes effect on the next rendered frame —
+    // before /screenshot captures. CONFIRMED (UpdatePositionAndRotation reads exactly these).
+    //
+    // Guarded end-to-end: any failure returns a clean Err instead of throwing out of Act.
+    private string SetCamera(JObject args) {
+      try {
+        // Resolve the target tile. If no explicit coordinate was given, frame the district
+        // center (where the base is). Otherwise use x/y; snap z to the terrain surface when
+        // omitted so the look-at point sits on the ground, not at z=0.
+        Vector3Int target;
+        bool haveCoord = Present(args?["x"]) || Present(args?["y"])
+                         || Present(args?["position"]) || Present(args?["pos"])
+                         || Present(args?["coordinates"]) || Present(args?["coord"]);
+        if (haveCoord) {
+          int x = GetCoord(args, "x");
+          int y = GetCoord(args, "y");
+          int z;
+          if (Present(args?["z"]) || (args?["position"] is JObject) || (args?["position"] is JArray)) {
+            z = GetCoord(args, "z");
+          } else {
+            z = 0;
+          }
+          // If z wasn't meaningfully supplied, snap to the terrain surface at (x,y).
+          if (!Present(args?["z"])) {
+            try { z = _terrain.GetTerrainHeightBelow(new Vector3Int(x, y, TerrainTopZ)); }
+            catch { z = 0; }
+          }
+          target = new Vector3Int(x, y, z);
+        } else {
+          target = GetDistrictCenter(new Vector3Int(0, 0, 0));
+        }
+
+        // Grid tile -> centered world position -> camera look-at. CONFIRMED: MoveTargetTo
+        // expects a world point (it clamps to the map internally).
+        Vector3 world = CoordinateSystem.GridToWorldCentered(target);
+        _camera.MoveTargetTo(world);
+
+        // Zoom: normalized 0..1 (0 = close, 1 = wide) maps to a camera distance; a value >1
+        // is taken as an explicit distance. Omitted -> a wide overview (large distance that
+        // SetZoomLevel saturates to the game's max zoom-out). SetZoomLevel clamps to the real
+        // limits, so these constants only set the usable normalized span.
+        const float NearDistance = 25f;   // zoom=0  : close in
+        const float FarDistance = 600f;   // zoom=1  : wide overview (clamps to max if smaller)
+        float distance;
+        if (Present(args?["zoom"])) {
+          float zoom = GetFloat(args, "zoom", 1f);
+          distance = zoom <= 1f
+              ? Mathf.Lerp(NearDistance, FarDistance, Mathf.Clamp01(zoom))
+              : zoom; // explicit distance
+        } else {
+          distance = FarDistance; // default: frame the whole base
+        }
+        _camera.SetZoomLevel(distance, 0f);
+
+        // Tilt (pitch): steep top-down-ish by default so a screenshot reads like an overview.
+        // 90 = straight down; ~55-80 keeps buildings legible in 3D. Clamped to [1,89].
+        float tilt = Present(args?["tilt"]) ? GetFloat(args, "tilt", 70f) : 70f;
+        tilt = Mathf.Clamp(tilt, 1f, 89f);
+        _camera.VerticalAngle = tilt;
+
+        return Ok(new {
+          command = "set_camera",
+          target = new { x = target.x, y = target.y, z = target.z },
+          world = new { x = world.x, y = world.y, z = world.z },
+          zoom_level = _camera.ZoomLevel,
+          distance,
+          tilt = _camera.VerticalAngle
+        });
+      } catch (Exception e) {
+        Debug.LogError("[TimberBridge] set_camera failed: " + e);
+        return Err("exception", e.Message);
+      }
     }
 
     // Execute an ordered list of actions in one main-thread hop:
