@@ -14,8 +14,9 @@ try:  # pragma: no cover - import path depends on invocation
     import economy
     import game_schema
     import planner
+    import resource_manager
 except ImportError:  # pragma: no cover
-    from agent import economy, game_schema, planner
+    from agent import economy, game_schema, planner, resource_manager
 
 
 def _counts_state(counts, logs=0):
@@ -611,6 +612,342 @@ class PowerEmissionTests(unittest.TestCase):
                     if g["id"] in self.POWER_BUILD_IDS:
                         self.assertIn(g["id"], actions)
                         self.assertIn(g["spec"], unlockable)
+
+
+class StoragePressureTests(unittest.TestCase):
+    """3e helper: goods near their storage capacity (stored/capacity >= 0.85)."""
+
+    def test_good_near_capacity_is_flagged(self):
+        state = {"resources": [{"good": "Log", "stored": 90, "capacity": 100}]}
+        self.assertIn("Log", economy.storage_pressure(state))
+
+    def test_good_at_threshold_is_flagged(self):
+        # Exactly 0.85 counts as pressure (>= boundary).
+        state = {"resources": [{"good": "Log", "stored": 85, "capacity": 100}]}
+        self.assertIn("Log", economy.storage_pressure(state))
+
+    def test_good_below_threshold_not_flagged(self):
+        state = {"resources": [{"good": "Log", "stored": 30, "capacity": 100}]}
+        self.assertNotIn("Log", economy.storage_pressure(state))
+
+    def test_good_without_capacity_not_flagged(self):
+        # No capacity key -> excluded (no signal to reason about).
+        self.assertEqual(economy.storage_pressure({"resources": [{"good": "Log", "stored": 90}]}), [])
+        # Zero/None capacity -> excluded (avoid div-by-zero + meaningless ratio).
+        self.assertEqual(economy.storage_pressure({"resources": [{"good": "Log", "stored": 90, "capacity": 0}]}), [])
+        self.assertEqual(economy.storage_pressure({"resources": [{"good": "Log", "stored": 90, "capacity": None}]}), [])
+
+    def test_ordered_most_pressured_first(self):
+        state = {
+            "resources": [
+                {"good": "Log", "stored": 86, "capacity": 100},
+                {"good": "Plank", "stored": 99, "capacity": 100},
+            ]
+        }
+        self.assertEqual(economy.storage_pressure(state)[0], "Plank")
+
+    def test_empty_state_is_safe(self):
+        self.assertEqual(economy.storage_pressure({}), [])
+
+
+class StorageSpecsForTests(unittest.TestCase):
+    """3e helper: the real storage building specs for a good, largest-first."""
+
+    def test_raw_bulk_good_maps_to_pile_family(self):
+        specs = economy.storage_specs_for("Log")
+        self.assertEqual(specs[0], "UndergroundPile")   # largest-first
+        self.assertIn("LargePile", specs)
+        self.assertIn("SmallPile", specs)
+        self.assertNotIn("SmallWarehouse", specs)       # a pile good, not a warehouse good
+
+    def test_manufactured_good_maps_to_warehouse_family(self):
+        specs = economy.storage_specs_for("Gear")
+        self.assertEqual(specs[0], "LargeWarehouse")    # largest-first
+        self.assertIn("SmallWarehouse", specs)
+        self.assertNotIn("SmallPile", specs)
+
+    def test_good_with_no_storage_building_returns_empty(self):
+        # SciencePoints has no storage_building in goods.json.
+        self.assertEqual(economy.storage_specs_for("SciencePoints"), [])
+
+    def test_unknown_good_returns_empty(self):
+        self.assertEqual(economy.storage_specs_for("NotAGood"), [])
+
+    def test_every_storage_spec_maps_to_a_valid_action(self):
+        actions = set(game_schema.actions())
+        for good in ("Log", "Plank", "Gear", "Bread", "MetalBlock"):
+            for spec in economy.storage_specs_for(good):
+                self.assertIsNotNone(game_schema.spec_to_action(spec), "%r has no action" % spec)
+                self.assertIn(game_schema.spec_to_action(spec), actions)
+
+
+class StorageEmissionTests(unittest.TestCase):
+    """3e wiring: analyze() emits a pile/warehouse goal under storage pressure.
+
+    Storage-pressure is a GROWTH/economy concern, gated behind _survival_secure
+    (like the 3c amenities) so no logs are spent on warehouses during a
+    thirst/hunger/homeless crisis. The base state is deliberately survival-secure
+    and water-buffered (SmallTank x5 zeroes the drought deficit) so these tests
+    isolate the storage path from the drought path.
+    """
+
+    def _secure_state(self, extra_resources, counts=None, science=0):
+        c = {
+            "LumberjackFlag.Folktails": 1,
+            "WaterPump.Folktails": 1,
+            "GathererFlag.Folktails": 1,
+            "SmallTank.Folktails": 5,   # 150 water capacity -> drought deficit 0
+        }
+        c.update(counts or {})
+        resources = [
+            {"good": "Water", "stored": 100, "days_remaining": 99},
+            {"good": "Food", "stored": 100, "days_remaining": 99},
+            {"good": "SciencePoints", "stored": science, "all_stock": science},
+        ]
+        resources.extend(extra_resources)
+        return {
+            "buildings": {"counts": c},
+            "resources": resources,
+            "population": {"total": 10, "homeless": 0, "free_beds": 5},
+            "weather": {"next": {"duration_days": 3}},
+        }
+
+    def test_log_pressure_emits_pile_goal(self):
+        state = self._secure_state([{"good": "Log", "stored": 95, "all_stock": 95, "capacity": 100}])
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_large_pile", ids)          # largest sci-0 pile
+        self.assertNotIn("build_small_warehouse", ids)  # a pile good never routes to a warehouse
+
+    def test_manufactured_pressure_emits_warehouse_goal(self):
+        # Pre-build a SmallWarehouse so the bootstrap storage goal is satisfied and the
+        # only warehouse goal comes from storage-pressure. Gear near cap -> warehouse.
+        state = self._secure_state(
+            [
+                {"good": "Log", "stored": 300, "all_stock": 300},
+                {"good": "Gear", "stored": 95, "capacity": 100},
+            ],
+            counts={"SmallWarehouse.Folktails": 1},
+        )
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_medium_warehouse", ids)    # largest sci-0 warehouse
+        self.assertNotIn("build_large_pile", ids)       # a warehouse good never routes to a pile
+
+    def test_no_pressure_emits_no_storage_goal(self):
+        state = self._secure_state([{"good": "Log", "stored": 30, "all_stock": 30, "capacity": 100}])
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        for pid in ("build_small_pile", "build_large_pile", "build_underground_pile"):
+            self.assertNotIn(pid, ids)
+
+    def test_storage_suppressed_during_survival_crisis(self):
+        # Not survival-secure (no pump, water/food at 0) -> storage goals suppressed
+        # even though Log is at capacity.
+        state = {
+            "buildings": {"counts": {"LumberjackFlag.Folktails": 1}},
+            "resources": [
+                {"good": "Log", "stored": 95, "all_stock": 95, "capacity": 100},
+                {"good": "Water", "stored": 0, "days_remaining": 0},
+                {"good": "Food", "stored": 0, "days_remaining": 0},
+            ],
+            "population": {"total": 10, "homeless": 0},
+        }
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        for pid in ("build_small_pile", "build_large_pile", "build_underground_pile"):
+            self.assertNotIn(pid, ids)
+
+    def test_science_gated_tier_appears_when_unlockable(self):
+        # 1000 science -> Underground Pile (sci 1000) unlockable -> it becomes the
+        # largest-first pile pick, exercising the unlockable_now gate.
+        state = self._secure_state(
+            [{"good": "Log", "stored": 300, "all_stock": 300, "capacity": 320}], science=1000
+        )
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_underground_pile", ids)
+
+    def test_emitted_storage_goal_is_well_formed(self):
+        state = self._secure_state([{"good": "Log", "stored": 95, "all_stock": 95, "capacity": 100}])
+        goal = next(g for g in planner.analyze(state, None) if g["id"] == "build_large_pile")
+        self.assertEqual(goal["spec"], "LargePile")
+        self.assertEqual(goal["cost_logs"], economy.log_cost("LargePile"))   # from buildings.json
+        self.assertTrue(goal["affordable"])                                  # 95 logs >> 6
+
+
+class DroughtTankEmissionTests(unittest.TestCase):
+    """3e wiring: analyze() emits tank goals per resource_manager.drought_prep."""
+
+    def _drought_state(self, pop=10, drought=8, water_stored=200, water_days=99,
+                       counts=None, science=0, logs=300):
+        # water_days defaults HIGH so the bootstrap water-storage goal (which keys on
+        # days_remaining) does NOT fire; that isolates the drought-buffer path, whose
+        # deficit keys on TANK CAPACITY vs drought length, not on current days. The
+        # dedup test overrides water_days low to make the bootstrap fire on purpose.
+        c = {"LumberjackFlag.Folktails": 1}
+        c.update(counts or {})
+        return {
+            "buildings": {"counts": c},
+            "resources": [
+                {"good": "Log", "stored": logs, "all_stock": logs},
+                {"good": "Water", "stored": water_stored, "days_remaining": water_days},
+                {"good": "SciencePoints", "stored": science, "all_stock": science},
+            ],
+            "population": {"total": pop, "homeless": 0},
+            "weather": {"next": {"duration_days": drought}},
+        }
+
+    def test_deficit_emits_a_tank_goal(self):
+        state = self._drought_state()
+        prep = resource_manager.drought_prep(state)
+        self.assertGreater(prep["deficit"], 0)          # precondition: buffer needed
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertTrue({"build_small_tank", "build_large_tank"} & set(ids))
+
+    def test_tank_goal_matches_recommendation(self):
+        # pop10 / 8-day drought -> deficit ~225 (>120) -> LargeTank recommended, but
+        # LargeTank (sci 600) is NOT unlockable at 0 science, so we FALL BACK to the
+        # always-available SmallTank rather than emitting nothing.
+        state = self._drought_state(science=0)
+        prep = resource_manager.drought_prep(state)
+        self.assertGreater(prep["build"]["LargeTank"], 0)
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_small_tank", ids)          # fallback: LargeTank locked
+        self.assertNotIn("build_large_tank", ids)
+
+    def test_large_tank_emitted_when_unlockable(self):
+        state = self._drought_state(science=600)
+        prep = resource_manager.drought_prep(state)
+        self.assertGreater(prep["build"]["LargeTank"], 0)
+        self.assertIn("LargeTank", set(economy.unlockable_now(state)))
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_large_tank", ids)
+
+    def test_no_deficit_emits_no_tank_goal(self):
+        # Well-buffered + tiny drought + high water days -> deficit 0 and the bootstrap
+        # water-storage goal does not fire either -> no tank goal at all.
+        state = self._drought_state(
+            drought=1, water_stored=500, water_days=99, counts={"LargeTank.Folktails": 2}
+        )
+        self.assertEqual(resource_manager.drought_prep(state)["deficit"], 0)
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertNotIn("build_small_tank", ids)
+        self.assertNotIn("build_large_tank", ids)
+
+    def test_no_duplicate_of_bootstrap_water_storage(self):
+        # Water days LOW so the bootstrap emits build_water_storage (== a SmallTank),
+        # AND drought_prep also wants a SmallTank. The drought path must DEDUP against
+        # the bootstrap goal (same building) and not add a second build_small_tank.
+        state = self._drought_state(pop=5, drought=3, water_stored=5, water_days=1)
+        prep = resource_manager.drought_prep(state)
+        self.assertGreater(prep["build"]["SmallTank"], 0)     # deficit small -> SmallTank
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertIn("build_water_storage", ids)             # bootstrap fired
+        self.assertNotIn("build_small_tank", ids)             # deduped, not duplicated
+
+
+class ReservoirEngineeringTests(unittest.TestCase):
+    """3e wiring: a BOUNDED reservoir-engineering goal (Dam/Levee/Floodgate).
+
+    The reservoir suggestion is capped: at most ONE per cycle, emitted only while
+    the drought is long, the colony still has a water deficit, and NO reservoir-
+    engineering building exists yet. Because a Dam/Levee does NOT reduce the tank
+    deficit, this is gated on building EXISTENCE (not the deficit magnitude), so it
+    cannot loop -- once one exists it is never re-suggested.
+    """
+
+    RESERVOIR_IDS = {"build_dam", "build_levee", "build_floodgate", "build_double_floodgate"}
+
+    def _long_drought_state(self, drought=8, counts=None, pop=15, science=0, logs=300):
+        c = {"LumberjackFlag.Folktails": 1}
+        c.update(counts or {})
+        return {
+            "buildings": {"counts": c},
+            "resources": [
+                {"good": "Log", "stored": logs, "all_stock": logs},
+                {"good": "Water", "stored": 10, "days_remaining": 2},
+                {"good": "SciencePoints", "stored": science, "all_stock": science},
+            ],
+            "population": {"total": pop, "homeless": 0},
+            "weather": {"next": {"duration_days": drought}},
+        }
+
+    def test_long_drought_emits_one_reservoir_goal(self):
+        ids = [g["id"] for g in planner.analyze(self._long_drought_state(), None)]
+        reservoir = [i for i in ids if i in self.RESERVOIR_IDS]
+        self.assertEqual(len(reservoir), 1)             # bounded: exactly one
+        self.assertEqual(reservoir[0], "build_dam")     # Dam (sci 0) is the default
+
+    def test_reservoir_suppressed_when_one_already_exists(self):
+        # A built Dam means the bound is hit -> no further reservoir suggestion.
+        state = self._long_drought_state(counts={"Dam.Folktails": 1})
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertFalse(self.RESERVOIR_IDS & set(ids))
+
+    def test_short_drought_emits_no_reservoir_goal(self):
+        state = self._long_drought_state(drought=3)      # short (< long threshold)
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertFalse(self.RESERVOIR_IDS & set(ids))
+
+    def test_reservoir_does_not_loop_on_a_large_persistent_deficit(self):
+        # A huge deficit must NOT scale reservoir emission (that would never terminate,
+        # since a dam doesn't cut the tank deficit): still at most ONE reservoir goal.
+        state = self._long_drought_state(pop=60, drought=10)
+        ids = [g["id"] for g in planner.analyze(state, None)]
+        self.assertLessEqual(len([i for i in ids if i in self.RESERVOIR_IDS]), 1)
+
+
+class StorageDroughtActionSpaceTests(unittest.TestCase):
+    """3e regression guard: every emitted storage/drought goal id is a real action."""
+
+    STORAGE_DROUGHT_IDS = {
+        "build_small_pile", "build_large_pile", "build_underground_pile",
+        "build_small_warehouse", "build_medium_warehouse", "build_large_warehouse",
+        "build_small_tank", "build_large_tank",
+        "build_dam", "build_levee", "build_floodgate", "build_double_floodgate",
+    }
+
+    def _states(self):
+        base_counts = {
+            "LumberjackFlag.Folktails": 1,
+            "WaterPump.Folktails": 1,
+            "GathererFlag.Folktails": 1,
+        }
+        states = []
+        for science in (0, 250, 600, 1000, 3000):
+            # storage-pressured, survival-secure
+            states.append({
+                "buildings": {"counts": dict(base_counts)},
+                "resources": [
+                    {"good": "Log", "stored": 300, "all_stock": 300, "capacity": 320},
+                    {"good": "Gear", "stored": 95, "capacity": 100},
+                    {"good": "Water", "stored": 100, "days_remaining": 99},
+                    {"good": "Food", "stored": 100, "days_remaining": 99},
+                    {"good": "SciencePoints", "stored": science, "all_stock": science},
+                ],
+                "population": {"total": 12, "homeless": 0, "free_beds": 5},
+                "weather": {"next": {"duration_days": 8}},
+            })
+            # drought-stressed
+            states.append({
+                "buildings": {"counts": {"LumberjackFlag.Folktails": 1}},
+                "resources": [
+                    {"good": "Log", "stored": 300, "all_stock": 300},
+                    {"good": "Water", "stored": 5, "days_remaining": 1},
+                    {"good": "SciencePoints", "stored": science, "all_stock": science},
+                ],
+                "population": {"total": 20, "homeless": 0},
+                "weather": {"next": {"duration_days": 9}},
+            })
+        return states
+
+    def test_every_storage_drought_goal_id_is_a_valid_action(self):
+        actions = set(game_schema.actions())
+        seen_any = False
+        for state in self._states():
+            for g in planner.analyze(state, None):
+                if g["id"] in self.STORAGE_DROUGHT_IDS:
+                    seen_any = True
+                    self.assertIn(g["id"], actions)
+                    # spec must round-trip back to this exact id
+                    self.assertEqual(game_schema.spec_to_action(g["spec"]), g["id"])
+        self.assertTrue(seen_any, "expected at least one storage/drought goal across states")
 
 
 if __name__ == "__main__":

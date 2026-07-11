@@ -549,6 +549,110 @@ def power_building_suggestion(state: dict) -> str:
     return options[0]
 
 
+# =============================================================================
+# Storage & drought (Task 3e)
+# =============================================================================
+# stored/capacity at or above this fraction means a good's buffer is "near full",
+# so more storage of that good's kind is wanted. A heuristic (behavioral-cloning)
+# threshold: high enough that it fires only when genuinely tight, low enough to add
+# storage BEFORE production stalls on an overflowing buffer.
+STORAGE_PRESSURE_THRESHOLD = 0.85
+
+# Bounded reservoir-engineering options, cheapest/most-basic first. A Dam (science
+# 0) is the always-available default; Levee/Floodgate come with science. This is a
+# CAPPED suggestion set -- see planner._append_drought_goals for why exactly one is
+# emitted (a reservoir building does NOT reduce the tank deficit, so it must never
+# be looped on the deficit magnitude).
+RESERVOIR_SPECS = ("Dam", "Levee", "Floodgate", "DoubleFloodgate")
+
+# A drought at least this long (days) justifies reservoir engineering on top of
+# tanks. Matches game_schema.feature_strings' 'long' drought bucket (>= 6 days).
+DROUGHT_LONG_DAYS = 6.0
+
+
+def _num(val, default=0.0):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+@lru_cache(maxsize=1)
+def _goods_by_id() -> Dict[str, dict]:
+    """good id -> goods.json record."""
+    return {g.get("id"): g for g in _load("goods.json").get("goods", [])}
+
+
+def storage_pressure(state: dict, threshold: float = STORAGE_PRESSURE_THRESHOLD) -> List[str]:
+    """Goods at/above ``threshold`` of their storage capacity, most-pressured first.
+
+    A good is "under storage pressure" when stored/capacity >= threshold (default
+    0.85): its buffer is nearly full, so more storage of the good's kind is wanted.
+    Goods with no usable capacity datum (capacity missing or <= 0) are EXCLUDED --
+    there is no ratio to reason about. This is a PURE signal over state["resources"];
+    the good -> building mapping (pile vs warehouse vs tank) is storage_specs_for()'s
+    job, not this function's. Ordered by fill ratio descending (spec name breaks ties)
+    so the planner addresses the tightest buffer first.
+    """
+    ranked = []
+    for item in (state.get("resources") or []) if isinstance(state, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        good = item.get("good")
+        if not good:
+            continue
+        capacity = _num(item.get("capacity"), 0.0)
+        if capacity <= 0:
+            continue
+        ratio = _num(item.get("stored"), 0.0) / capacity
+        if ratio >= threshold:
+            ranked.append((ratio, str(good)))
+    ranked.sort(key=lambda r: (-r[0], r[1]))
+    return [good for _ratio, good in ranked]
+
+
+def storage_specs_for(good: str) -> List[str]:
+    """Real storage building specs that hold ``good``, LARGEST-capacity first.
+
+    Grounded in goods.json's per-good ``storage_building`` list (display names, given
+    in ascending size order); reversed here so the biggest/most-efficient store is
+    first, mapped to bare specs, and filtered to specs with a real build_<x> action.
+    Empty for goods with no storage building (e.g. SciencePoints) or unknown goods.
+
+    This encodes the pile-vs-warehouse-vs-tank choice straight from the database: raw/
+    bulk goods (Log, Plank, MetalBlock, ...) list the Pile family; general goods (food,
+    Gear, Paper, ...) the Warehouse family; fluids (Water, Extract) the Tank family.
+    The planner walks this list and takes the first spec that is unlockable_now, so the
+    science-gated tiers (Large Warehouse 250 SP, Underground Pile 1000 SP) are reached
+    only once affordable while a start-tier store is always available.
+    """
+    entry = _goods_by_id().get(good) or {}
+    names = entry.get("storage_building") or []
+    name_to_spec = resource_manager._building_name_to_spec()
+    specs: List[str] = []
+    for name in reversed(list(names)):  # ascending -> largest-first
+        spec = name_to_spec.get(name)
+        if spec and game_schema.spec_to_action(spec) and spec not in specs:
+            specs.append(spec)
+    return specs
+
+
+def reservoir_suggestion(state: dict) -> Optional[str]:
+    """The single reservoir-engineering building to suggest, or None.
+
+    Returns the first RESERVOIR_SPECS entry that is unlockable_now: Dam (science 0)
+    on any normal colony, upgrading to Levee/Floodgate only if a Dam is somehow
+    unavailable. Deliberately ONE building -- the planner caps reservoir emission (see
+    planner._append_drought_goals) because reservoir structures do not shrink the tank
+    deficit and so must never be looped on it.
+    """
+    unlockable = set(unlockable_now(state))
+    for spec in RESERVOIR_SPECS:
+        if spec in unlockable and game_schema.spec_to_action(spec):
+            return spec
+    return None
+
+
 __all__ = [
     "needed_producers",
     "producer_plan",
@@ -563,6 +667,12 @@ __all__ = [
     "power_building_suggestion",
     "power_producer_specs",
     "is_power_consumer",
+    "storage_pressure",
+    "storage_specs_for",
+    "reservoir_suggestion",
+    "RESERVOIR_SPECS",
+    "STORAGE_PRESSURE_THRESHOLD",
+    "DROUGHT_LONG_DAYS",
 ]
 
 

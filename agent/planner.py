@@ -38,6 +38,16 @@ except Exception:  # pragma: no cover - import path depends on invocation
     except Exception:  # pragma: no cover
         game_schema = None
 
+# Drought-buffer sizing (Task 3e) reuses resource_manager.drought_prep verbatim.
+# Optional, like the economy import: the planner degrades gracefully without it.
+try:
+    import resource_manager
+except Exception:  # pragma: no cover - import path depends on invocation
+    try:
+        from agent import resource_manager  # type: ignore
+    except Exception:  # pragma: no cover
+        resource_manager = None
+
 
 def _existing_buildings(state):
     """Placed buildings as [{spec,x,y,z}] for adjacency scoring (from buildings.list)."""
@@ -236,6 +246,11 @@ def analyze(state, map_data, buildings_detail=None):
     _append_production_chain_goals(goals, state)
     _append_wellbeing_goals(goals, state)
     _append_power_goals(goals, state)
+    # Drought before storage: tank goals (and the bootstrap water-storage goal) land
+    # in the covered set first, so a water storage-pressure signal can't double-emit a
+    # tank the drought path already asked for.
+    _append_drought_goals(goals, state)
+    _append_storage_goals(goals, state)
 
     if _sites_under_construction(state) and _logs_available(state) > 0 and not _has_urgent_unblocked_goal(goals):
         goals.append(
@@ -536,6 +551,150 @@ def _append_power_goals(goals, state):
             cost_logs=economy.log_cost(spec),
         )
     )
+
+
+def _covered_ids(goals):
+    """Goal ids already present, PLUS the build action of each goal's spec.
+
+    Lets a later emitter dedup both against explicit ids and against a bootstrap goal
+    that targets the same building under a different id (e.g. build_water_storage ->
+    SmallTank -> build_small_tank). Mirrors the covered-set the 3a/3b/3c/3d emitters
+    build inline.
+    """
+    covered = {goal.get("id") for goal in goals}
+    if game_schema is not None:
+        for goal in goals:
+            spec = goal.get("spec")
+            if spec:
+                action = game_schema.spec_to_action(spec)
+                if action:
+                    covered.add(action)
+    return covered
+
+
+def _emit_spec_goal(goals, covered, spec, why, logs_have):
+    """Append one build_<spec> goal (log cost from buildings.json) unless covered.
+
+    Returns True when a goal was appended. Mutates ``covered`` with the new id so
+    repeated calls in one cycle self-dedup. The caller is responsible for the science
+    gate (only unlockable specs should be passed); this is the shared emit tail for
+    the 3e storage/drought goals, matching how the 3a-3d emitters build a goal.
+    """
+    if game_schema is None or economy is None:
+        return False
+    goal_id = game_schema.spec_to_action(spec)
+    if not goal_id or goal_id in covered:
+        return False
+    covered.add(goal_id)
+    goals.append(
+        _goal(goal_id, why, spec=spec, logs_have=logs_have, cost_logs=economy.log_cost(spec))
+    )
+    return True
+
+
+def _append_drought_goals(goals, state):
+    """Append Task-3e drought goals: the measurable tank buffer + a bounded reservoir.
+
+    TANKS (survival-adjacent -> emitted UNGATED by _survival_secure, since surviving a
+    drought IS survival): resource_manager.drought_prep sizes the water buffer for the
+    next drought and recommends SmallTank/LargeTank counts; while its ``deficit`` > 0 we
+    emit the matching tank goal. This is the MEASURABLE drought buffer -- each tank built
+    raises current_buffer and shrinks the deficit, so it terminates at deficit 0.
+      * LargeTank (600 SP) is routed through the unlockable_now science gate.
+      * If a LargeTank is recommended but not yet unlockable we FALL BACK to the always-
+        available SmallTank, so a big deficit on a low-science colony still gets buffer
+        instead of emitting nothing.
+      * De-dups against the bootstrap build_water_storage goal (also a SmallTank) via
+        the covered set, so the two never double-emit.
+
+    RESERVOIR ENGINEERING (Levee/Dam/Floodgate -- BOUNDED, at most one): drought_prep's
+    deficit models ONLY tanks; a Dam/Levee/Floodgate does NOT reduce it. So reservoir
+    emission is deliberately NOT keyed on the deficit magnitude (looping levee/floodgate
+    on a deficit they can't shrink would never terminate). Instead we emit a SINGLE
+    reservoir goal (economy.reservoir_suggestion -> Dam by default) only while the
+    drought is long (>= economy.DROUGHT_LONG_DAYS), a deficit still exists, AND no
+    reservoir-engineering building exists yet. That "none built yet" guard is the hard
+    bound: once one Dam/Levee/Floodgate exists the suggestion is never repeated. Water/
+    river placement is a Task 8 refinement; here the goal just needs a valid spec (the
+    bridge validates placement and falls to the next candidate if unreachable).
+    """
+    if economy is None or game_schema is None or resource_manager is None:
+        return
+
+    prep = resource_manager.drought_prep(state)
+    deficit = _as_float(prep.get("deficit"), 0.0)
+    if deficit <= 0:
+        return
+
+    covered = _covered_ids(goals)
+    logs_have = _logs_available(state)
+    unlockable = set(economy.unlockable_now(state))
+    build = prep.get("build") or {}
+
+    want_small = _as_int(build.get("SmallTank"), 0) > 0
+    want_large = _as_int(build.get("LargeTank"), 0) > 0
+    large_ok = want_large and "LargeTank" in unlockable
+    # LargeTank recommended but still science-locked -> keep buffering with SmallTank.
+    small_needed = want_small or (want_large and not large_ok)
+
+    if large_ok:
+        _emit_spec_goal(
+            goals, covered, "LargeTank",
+            "drought buffer short by %d water; add a Large Tank" % int(deficit),
+            logs_have,
+        )
+    if small_needed:
+        _emit_spec_goal(
+            goals, covered, "SmallTank",
+            "drought buffer short by %d water; add a Small Tank" % int(deficit),
+            logs_have,
+        )
+
+    # Bounded reservoir engineering: long drought, still in deficit, none built yet.
+    drought_days = _as_float(prep.get("drought_days"), 0.0)
+    reservoir_built = any(_building_count(state, spec) > 0 for spec in economy.RESERVOIR_SPECS)
+    if drought_days >= economy.DROUGHT_LONG_DAYS and not reservoir_built:
+        spec = economy.reservoir_suggestion(state)
+        if spec:
+            _emit_spec_goal(
+                goals, covered, spec,
+                "long %d-day droughts with a water deficit; %s starts reservoir "
+                "engineering (build one, then expand manually)" % (int(drought_days), spec),
+                logs_have,
+            )
+
+
+def _append_storage_goals(goals, state):
+    """Append Task-3e pile/warehouse goals for goods near their storage capacity.
+
+    Storage-pressure is an economy/GROWTH concern -- a full pile stalls production but
+    is not itself a survival crisis -- so, like the 3c amenities, it is GATED behind
+    _survival_secure: no logs are diverted to warehouses while thirst, hunger or
+    homelessness is unresolved. For each pressured good (economy.storage_pressure) we
+    pick the largest storage building of the good's OWN kind that is unlockable_now
+    (economy.storage_specs_for is largest-first; the science gate down-selects Large
+    Warehouse / Underground Pile to when they are affordable), and emit one build goal
+    per distinct storage building. Goods with no storage building (SciencePoints) are
+    skipped. De-dups against goals already emitted (incl. the bootstrap warehouse).
+    """
+    if economy is None or game_schema is None:
+        return
+    if not _survival_secure(state):
+        return
+
+    covered = _covered_ids(goals)
+    logs_have = _logs_available(state)
+    unlockable = set(economy.unlockable_now(state))
+
+    for good in economy.storage_pressure(state):
+        spec = next((s for s in economy.storage_specs_for(good) if s in unlockable), None)
+        if not spec:
+            continue  # good has no storage building, or none of its tiers is unlockable
+        _emit_spec_goal(
+            goals, covered, spec,
+            "storage: %s is near capacity; add a %s" % (good, spec),
+            logs_have,
+        )
 
 
 def reachable_tiles(map_data, start_xy):
