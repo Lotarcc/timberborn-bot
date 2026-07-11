@@ -116,6 +116,32 @@ namespace TimberBridge {
       return JsonConvert.SerializeObject(dto);
     }
 
+    // Per-tile resource code for the /map resource layer, so any resource on the map is
+    // visible in the spatial view (not just via /resources). Code: 1=tree (cuttable, e.g.
+    // wild/planted trees), 2=gatherable (berry bush AND farm crop — both harvested via a
+    // Gatherable), 3=planted-but-immature (a plantable not yet grown). A tree wins over a
+    // gatherable on the same column. Keyed by (x,y) column; z is the surface.
+    public Dictionary<Vector2Int, int> ResourceTileCodes() {
+      var codes = new Dictionary<Vector2Int, int>();
+      foreach (NaturalResourceModel model in _entities.GetEnabled<NaturalResourceModel>()) {
+        try {
+          var cuttable = model.GetComponent<Cuttable>();
+          var gatherable = model.GetComponent<Gatherable>();
+          if (cuttable == null && gatherable == null) continue;
+          var block = model.GetComponent<BlockObject>();
+          if (block == null) continue;
+          var key = new Vector2Int(block.Coordinates.x, block.Coordinates.y);
+          int code = cuttable != null ? 1 : 2;
+          if (!codes.TryGetValue(key, out int existing) || code < existing) {
+            codes[key] = code; // tree (1) wins over gatherable (2)
+          }
+        } catch (Exception e) {
+          Debug.LogError("[TimberBridge] resource tile-code failed: " + e);
+        }
+      }
+      return codes;
+    }
+
     // Tiles of all currently-mature (cuttable-ready) trees — used by the
     // designate_cutting action to mark the whole standing forest for felling.
     public List<Vector3Int> MatureTreeTiles() {

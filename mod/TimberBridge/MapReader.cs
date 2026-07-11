@@ -22,6 +22,7 @@ namespace TimberBridge
         private readonly IBlockService _blockService;              // CONFIRMED: Bind<IBlockService>().ToExisting<BlockService>()
         private readonly DistrictCenterRegistry _districtCenterRegistry; // CONFIRMED: Bind<DistrictCenterRegistry>().AsSingleton()
         private readonly ReachabilityReader _reachability;         // game-truth road-spill reachability per tile
+        private readonly ResourcesReader _resources;               // per-tile resource layer (trees/berries/crops)
 
         public MapReader(
             MapSize mapSize,
@@ -30,7 +31,8 @@ namespace TimberBridge
             ISoilMoistureService soilMoistureService,
             IBlockService blockService,
             DistrictCenterRegistry districtCenterRegistry,
-            ReachabilityReader reachability)
+            ReachabilityReader reachability,
+            ResourcesReader resources)
         {
             _mapSize = mapSize;
             _terrainService = terrainService;
@@ -39,6 +41,7 @@ namespace TimberBridge
             _blockService = blockService;
             _districtCenterRegistry = districtCenterRegistry;
             _reachability = reachability;
+            _resources = resources;
         }
 
         // CONFIRMED: MapSize.TerrainSize2D : Vector2Int -> (width, depth). .z (height) from TerrainSize.
@@ -170,6 +173,33 @@ namespace TimberBridge
             }
             onRoad.Append(']');
 
+            // Resource layer per tile so trees/berries/crops are visible IN the map (not only
+            // via /resources). Same window + row-major indexing. Code: 0=none, 1=tree,
+            // 2=gatherable (berry bush / farm crop). Guarded — a resource read never fails /map.
+            var resource = new StringBuilder();
+            resource.Append('[');
+            try
+            {
+                var codes = _resources.ResourceTileCodes();
+                bool firstRes = true;
+                for (int y = y0; y <= y1; y++)
+                {
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        if (!firstRes) resource.Append(',');
+                        firstRes = false;
+                        resource.Append(codes.TryGetValue(new Vector2Int(x, y), out int code) ? code : 0);
+                    }
+                }
+            }
+            catch
+            {
+                resource.Clear();
+                resource.Append('[');
+                for (int i = 0; i < w * h; i++) { if (i > 0) resource.Append(','); resource.Append('0'); }
+            }
+            resource.Append(']');
+
             var sb = new StringBuilder();
             sb.Append('{');
             sb.Append("\"origin\":{\"x\":").Append(x0).Append(",\"z\":").Append(y0).Append('}');
@@ -185,6 +215,7 @@ namespace TimberBridge
             sb.Append(",\"occupied\":").Append(occupied);
             sb.Append(",\"reachable\":").Append(reach);
             sb.Append(",\"on_road\":").Append(onRoad);
+            sb.Append(",\"resource\":").Append(resource);
             sb.Append('}');
             return sb.ToString();
         }
