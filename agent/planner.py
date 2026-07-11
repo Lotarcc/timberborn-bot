@@ -18,6 +18,26 @@ except Exception:  # pragma: no cover - import path depends on invocation
     except Exception:  # pragma: no cover
         placement = None
 
+# Full-economy production-chain reasoning (Task 3a). Optional: the bootstrap
+# planner still works without it; when present, analyze() appends producer goals
+# for demanded-but-unproduced goods. game_schema maps a producer spec to its
+# gameplay goal id (build_<snake>) and validates the action space.
+try:
+    import economy
+except Exception:  # pragma: no cover - import path depends on invocation
+    try:
+        from agent import economy  # type: ignore
+    except Exception:  # pragma: no cover
+        economy = None
+
+try:
+    import game_schema
+except Exception:  # pragma: no cover - import path depends on invocation
+    try:
+        from agent import game_schema  # type: ignore
+    except Exception:  # pragma: no cover
+        game_schema = None
+
 
 def _existing_buildings(state):
     """Placed buildings as [{spec,x,y,z}] for adjacency scoring (from buildings.list)."""
@@ -213,6 +233,8 @@ def analyze(state, map_data, buildings_detail=None):
             )
         )
 
+    _append_production_chain_goals(goals, state)
+
     if _sites_under_construction(state) and _logs_available(state) > 0 and not _has_urgent_unblocked_goal(goals):
         goals.append(
             {
@@ -223,6 +245,43 @@ def analyze(state, map_data, buildings_detail=None):
         )
 
     return goals
+
+
+def _append_production_chain_goals(goals, state):
+    """Append Task-3a producer goals for demanded-but-unproduced goods.
+
+    Thin emit loop: economy.producer_plan does the chain reasoning and raw->refined
+    ordering; here we just turn each producer spec into a goal whose id is the real
+    game_schema action (build_<snake>) with the log cost sourced from buildings.json.
+    De-dups against goals already emitted, including bootstrap goals that target the
+    same building under a different id (e.g. build_lumberjack -> LumberjackFlag).
+    """
+    if economy is None or game_schema is None:
+        return
+
+    covered = {goal.get("id") for goal in goals}
+    for goal in goals:
+        spec = goal.get("spec")
+        if spec:
+            action = game_schema.spec_to_action(spec)
+            if action:
+                covered.add(action)
+
+    logs_have = _logs_available(state)
+    for item in economy.producer_plan(state):
+        goal_id = game_schema.spec_to_action(item["spec"])
+        if not goal_id or goal_id in covered:
+            continue  # not a gameplay action, or already covered by another goal
+        covered.add(goal_id)
+        goals.append(
+            _goal(
+                goal_id,
+                item["why"],
+                spec=item["spec"],
+                logs_have=logs_have,
+                cost_logs=item["cost_logs"],
+            )
+        )
 
 
 def reachable_tiles(map_data, start_xy):
@@ -336,7 +395,11 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
             elif spec == "Path":
                 if _distance(tile, dc) <= 6:
                     candidate = _candidate(tile, "near district center")
-            elif spec in ("SmallTank", "Lodge", "SmallWarehouse", "Inventor", "LumberjackFlag", "GathererFlag"):
+            elif spec in ("SmallTank", "Lodge", "SmallWarehouse", "Inventor", "LumberjackFlag", "GathererFlag") or _is_buildable_spec(spec):
+                # Whitelisted bootstrap specs plus any real buildable gameplay spec
+                # (e.g. the Task-3a industry producers) get generic flat-dry-land
+                # candidates. Verb "specs" like set_speed resolve to no action and
+                # are skipped so they never receive build tiles.
                 same_height = _same_height_dry_neighbors(arrays, tile)
                 if same_height >= 2:
                     candidate = _candidate(tile, "flat dry land; %s same-height dry neighbors" % same_height)
@@ -396,11 +459,15 @@ def _goal(
     coords=None,
     current_count=None,
     target_count=None,
+    cost_logs=None,
 ):
     item = {"id": goal_id, "why": why, "satisfied": False}
     if spec:
         item["spec"] = spec
-        item["cost_logs"] = COST_LOGS.get(spec, 0)
+        # COST_LOGS is the bootstrap table; it omits/misnames the economy
+        # buildings, so callers with a real cost (sourced from buildings.json via
+        # economy.log_cost) pass it explicitly and override the lookup.
+        item["cost_logs"] = COST_LOGS.get(spec, 0) if cost_logs is None else cost_logs
         item["free"] = item["cost_logs"] == 0
         item["affordable"] = item["free"] or (
             logs_have is not None and item["cost_logs"] <= logs_have
@@ -522,6 +589,20 @@ def _format_coords(coords):
     if isinstance(coords, dict):
         return "(%s,%s,%s)" % (coords.get("x", "?"), coords.get("y", coords.get("z", "?")), coords.get("z", "?"))
     return str(coords)
+
+
+def _is_buildable_spec(spec):
+    """True if ``spec`` is a real buildable gameplay spec (has a build_<x> action).
+
+    Lets candidates_for hand generic land tiles to economy producer specs without
+    hard-coding them, while excluding verb pseudo-specs like set_speed.
+    """
+    if not spec or game_schema is None:
+        return False
+    try:
+        return game_schema.spec_to_action(spec) is not None
+    except Exception:  # pragma: no cover - defensive
+        return False
 
 
 def _goal_spec(goal):
