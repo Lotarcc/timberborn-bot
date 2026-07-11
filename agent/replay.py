@@ -460,6 +460,28 @@ class ReplayTests(unittest.TestCase):
     def test_load_run_missing_run_id_returns_empty_list(self):
         self.assertEqual(load_run("does_not_exist_%s" % uuid.uuid4().hex), [])
 
+    # -- goal_id / game_schema consistency ---------------------------------
+    #
+    # The five GOAL_* constants are hand-copied goal_id strings. If game_schema's
+    # DB-driven action space ever renames/removes one of the underlying buildings,
+    # credit_assignment would silently recommend an action that no controller/LLM
+    # consumer can ever match. Guard the drift here rather than discovering it at
+    # runtime.
+
+    def test_goal_id_constants_are_valid_game_schema_actions(self):
+        # `agent/` has no __init__.py, and this module is designed to run standalone
+        # (`python3 agent/replay.py`) as well as via package-qualified imports, so
+        # try the package-relative import first and fall back to the bare sibling
+        # import that resolves when sys.path[0] is agent/ itself.
+        try:
+            from agent import game_schema
+        except ImportError:
+            import game_schema
+        self.assertLessEqual(
+            {GOAL_WATER_PUMP, GOAL_SMALL_TANK, GOAL_GATHERER, GOAL_FARMHOUSE, GOAL_LUMBERJACK},
+            set(game_schema.actions()),
+        )
+
     # -- shared fixtures ------------------------------------------------------
     #
     # Trace shapes are plain data (not test methods) so classification tests and
@@ -645,6 +667,38 @@ class ReplayTests(unittest.TestCase):
         entries = credit_assignment(run_id, lookback=6)
         self.assertTrue(entries)
         self.assertTrue(all(e["better_action"] == GOAL_SMALL_TANK for e in entries))
+
+    def test_credit_assignment_stall_has_no_better_action_when_survival_buildings_built(self):
+        # Reachable stall state: WaterPump, GathererFlag and LumberjackFlag are ALL
+        # already built, so _stall_better_action has nothing left to recommend and
+        # returns None (credit_assignment then reports that on every window entry).
+        run_id = self._new_run_id("stall_all_built")
+        counts = {
+            "DistrictCenter.Folktails": 1,
+            "WaterPump.Folktails": 1,
+            "GathererFlag.Folktails": 1,
+            "LumberjackFlag.Folktails": 1,
+        }
+        steps = [
+            (dict(day=1, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                  log=5, plank=0, counts=counts), "build_lumberjack_flag"),
+        ]
+        for i in range(8):
+            steps.append(
+                (dict(day=1 + i, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                      log=5, plank=0, counts=counts), "advance_time")
+            )
+        self._write_trace(run_id, steps)
+
+        summary = summarize_run(run_id)
+        self.assertEqual(summary["ended"], "stalled")
+        self.assertEqual(summary["death_cause"], "stall")
+
+        entries = credit_assignment(run_id, lookback=6)
+        self.assertEqual(len(entries), 6)
+        for entry in entries:
+            self.assertIsNone(entry["better_action"])
+            self.assertIn("all present", entry["reason"])
 
 
 if __name__ == "__main__":
