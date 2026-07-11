@@ -24,8 +24,10 @@ def distance_field(sources, width, height, passable=None, terrain=None, max_step
     queue = deque()
     for col, row in _source_points(sources, width, height):
         index = row * width + col
-        if not _value(passable, index, True):
-            continue
+        # Seed the source at distance 0 EVEN IF it is impassable: a source tile is
+        # a distance origin (a district center, a tree) whose own tile is occupied,
+        # but its passable neighbours must still get distance 1, 2, ... Only the
+        # EXPANSION below respects `passable`, not the seeding.
         if distances[index] == 0:
             continue
         distances[index] = 0

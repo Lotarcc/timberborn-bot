@@ -103,9 +103,14 @@ def score_for_spec(spec, arrays, resources, dc_xy, occupied_extra=None):
     extra_mask, extra_records = _occupied_extra(occupied_extra, grid)
     resource_mask = _resource_occupied(resources, grid)
     walkable = _walkable_mask(grid)
+    # The DC-proximity gradient must span the whole LAND area, not the narrow
+    # reachable-spill mask: the DC tile is occupied and can sit at the map-window
+    # edge, so a reachable-only field gets trapped (reaches 0 tiles). Occupancy is
+    # enforced later by `allowed`; here we only want a distance-to-DC gradient.
+    land = _land_mask(grid)
     dc_colrow = spatial.xy_to_colrow(_xy_pair(dc_xy), grid)
     dc_distance = spatial.distance_field(
-        [dc_colrow], width, height, passable=walkable,
+        [dc_colrow], width, height, passable=land,
         terrain=grid["terrain"], max_step=1,
     )
     dc_layer = spatial.influence(dc_distance, profile.get("dc_scale", 24))
@@ -243,6 +248,13 @@ def _walkable_mask(grid):
         and (not has_reachable or bool(_value(grid["reachable"], index, 0)))
         for index in range(total)
     ]
+
+
+def _land_mask(grid):
+    """Land tiles (no water), ignoring occupancy/reachability — used to spread the
+    DC-proximity distance gradient across the whole map."""
+    total = grid["width"] * grid["height"]
+    return [float(_value(grid["water"], index, 0)) <= 0 for index in range(total)]
 
 
 def _safe_reachable_land(grid):
