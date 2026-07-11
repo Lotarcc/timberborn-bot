@@ -1,0 +1,12 @@
+[
+  "build_lumberjack",
+  "build_water_pump",
+  "build_water_storage",
+  "build_gatherer",
+  "build_farm",
+  "build_lodge",
+  "build_warehouse",
+  "build_inventor",
+  "build_forester",
+  "advance_time"
+]

@@ -1,0 +1,255 @@
+{
+  "_meta": {
+    "game": "Timberborn",
+    "version_target": "v1.0.x",
+    "faction": "Folktails",
+    "description": "Structured reference for the beaver Needs and Well-Being system. Values compiled from the official Timberborn wiki (timberborn.wiki.gg). Numbers marked with _uncertain were not confirmed with an exact in-game figure.",
+    "sources": [
+      "https://timberborn.wiki.gg/wiki/Needs",
+      "https://timberborn.wiki.gg/wiki/Well-Being",
+      "https://timberborn.wiki.gg/wiki/Hunger",
+      "https://timberborn.wiki.gg/wiki/Thirst",
+      "https://timberborn.wiki.gg/wiki/Social_Life",
+      "https://timberborn.wiki.gg/wiki/Aesthetics",
+      "https://timberborn.wiki.gg/wiki/Awe",
+      "https://timberborn.wiki.gg/wiki/Fun",
+      "https://timberborn.wiki.gg/wiki/Wet_Fur",
+      "https://timberborn.wiki.gg/wiki/Shelter",
+      "https://timberborn.wiki.gg/wiki/Housing",
+      "https://timberborn.wiki.gg/wiki/Life_Expectancy"
+    ],
+    "conventions": {
+      "satisfaction_scale": "Most needs run on a 0-100 satisfaction meter (Shelter runs -20..80, Sleep 0..80). Decay is subtracted from the meter each in-game day; visiting the source refills it.",
+      "wellbeing_bonus_value": "The maximum well-being SCORE points a fully-satisfied need contributes to the beaver's total Well-Being score. A beaver only earns the points while the underlying meter is above 0.",
+      "day": "One in-game day."
+    }
+  },
+
+  "survival_needs": [
+    {
+      "need": "Hunger",
+      "meter_max": 100,
+      "meter_min": -300,
+      "source_buildings": [
+        "Any Food source: Gathering Flag / bushes (berries), Farmhouse crops, Grill/Bakery/Gristmill processed foods, food distributed and eaten anywhere in a district"
+      ],
+      "consumption_rate_per_day": 80,
+      "restore_per_food_unit": 30,
+      "food_units_per_day": 2.67,
+      "what_happens_if_unmet": "At 0 Hunger the beaver gains the 'Starving' status: Adults -50% Work Speed, Kits -40% Growth Speed. Continued starvation kills the beaver.",
+      "time_to_death": "~5 days from a full meter (about 1.25 days to empty at 80/day, then ~3.75 days of Starving before death).",
+      "notes": "Food is the single most important logistic. Eating different food TYPES also feeds the Nutrition well-being need (see wellbeing_needs)."
+    },
+    {
+      "need": "Thirst",
+      "meter_max": 100,
+      "meter_min": -300,
+      "_min_uncertain": true,
+      "source_buildings": [
+        "Water Pump / Deep Water Pump (draws water) -> Water is stored and distributed; beavers drink from stock anywhere in the district",
+        "Large Water Tank / Water Tank for storage"
+      ],
+      "consumption_rate_per_day": 70,
+      "restore_per_water_unit_pct": 33,
+      "water_units_per_day": 2.1,
+      "what_happens_if_unmet": "At 0 Thirst the beaver becomes 'Dehydrated': -25% Movement Speed. Continued dehydration kills the beaver.",
+      "time_to_death": "~5.71 days from a full meter (about 1.43 days to empty at 70/day, then ~4.3 days dehydrated).",
+      "notes": "A Water Pump must sit on/next to a water tile. Water is also needed for many production chains and irrigation."
+    },
+    {
+      "need": "Sleep",
+      "meter_max": 80,
+      "meter_min": 0,
+      "source_buildings": [
+        "Housing (Lodge, Mini Lodge, Double Lodge, Triple Lodge) - sheltered sleep",
+        "District Center provides a fallback sleep spot but with the homeless/shelter penalty"
+      ],
+      "consumption_rate_per_day": 60,
+      "restore_rate": "+30 per hour while sleeping in housing; one night of sheltered sleep refills the meter from min to max.",
+      "what_happens_if_unmet": "-10% Movement Speed and reduced sleep restoration; if fully depleted the beaver falls asleep on the spot wherever it is.",
+      "notes": "Beavers only sleep during the night portion of their schedule. Housing satisfies Sleep AND the Shelter need together."
+    },
+    {
+      "need": "Shelter",
+      "category_note": "Listed as a basic need; also feeds Well-Being (see wellbeing_needs entry 'Shelter/Housing'). Included here because lack of shelter degrades survival-critical sleep and blocks breeding.",
+      "meter_max": 80,
+      "meter_min": -20,
+      "decay_per_day": 30,
+      "restore_rate": "+30 per hour while sleeping in housing.",
+      "source_buildings": ["Any Housing building"],
+      "what_happens_if_unmet": "Homeless beavers sleep poorly: ~-25% sleep restoration (need longer to recover) and a negative well-being contribution. Folktails CANNOT reproduce without adequate shelter/free housing.",
+      "wellbeing_modifier_range": [-3, 1],
+      "notes": "Because it gates breeding and good sleep, treat housing as survival-tier at game start."
+    }
+  ],
+
+  "wellbeing_needs": [
+    {
+      "need": "Nutrition (food variety)",
+      "source_buildings": [
+        "Eating different TYPES of food. Each distinct food eaten contributes well-being; e.g. Berries, Carrots, Potatoes, Grilled/Baked/processed goods, Maple Syrup products, Coffee."
+      ],
+      "wellbeing_bonus_value": "+1 to +2 per common food type; premium items (Maple Pastry, Coffee) +3. Total scales with the variety of foods available in the district.",
+      "_wellbeing_bonus_value_uncertain": true,
+      "decay_per_day": null,
+      "_decay_uncertain": true,
+      "max_value": 100,
+      "radius": "n/a (satisfied by eating, not proximity)",
+      "notes": "Early game a single food source gives little/no Nutrition well-being; adding a second and third food type is one of the cheapest ways to raise the score. Except Coffee, all Nutrition foods also satisfy Hunger."
+    },
+    {
+      "need": "Wet Fur",
+      "source_buildings": [
+        "Water tiles (walking through flowing water via paths) - free but risks Contamination on Badtides",
+        "Shower (Folktails)",
+        "Lido (Folktails)"
+      ],
+      "wellbeing_bonus_value": 1,
+      "decay_per_day": 30,
+      "max_value": 100,
+      "radius": "n/a (beaver visits the source)",
+      "notes": "One of the first well-being needs to address; cheap. Shower is the safe, reliable source vs. raw water tiles."
+    },
+    {
+      "need": "Social Life",
+      "source_buildings": [
+        {"building": "Campfire", "wellbeing_bonus_value": 1, "satisfaction_rate_per_hr": 60, "decay_per_day": 20},
+        {"building": "Rooftop Terrace", "wellbeing_bonus_value": 1, "satisfaction_rate_per_hr": 60, "decay_per_day": 20},
+        {"building": "Contemplation Spot", "wellbeing_bonus_value": 1, "satisfaction_rate_per_hr": 60, "decay_per_day": 20},
+        {"building": "Agora (Folktails)", "wellbeing_bonus_value": 3, "satisfaction_rate_per_hr": 60, "decay_per_day": 10},
+        {"building": "Dance Hall (Folktails)", "wellbeing_bonus_value": 5, "satisfaction_rate_per_hr": 60, "decay_per_day": 10}
+      ],
+      "max_value": 100,
+      "radius": "Beavers walk to and gather at the building during leisure time; multiple visitors present improves the effect.",
+      "notes": "Campfire is the cheapest early Social Life source. Only the single highest-tier Social Life building a beaver visits counts toward the score (needs of the same category do not stack across buildings)."
+    },
+    {
+      "need": "Aesthetics",
+      "source_buildings": [
+        {"building": "Shrub", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Lantern", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Roofs (decorative)", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Scarecrow", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Weathervane", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Brazier", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Beaver Bust", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Bell", "wellbeing_bonus_value": 1, "decay_per_day": 40},
+        {"building": "Beaver Statue", "wellbeing_bonus_value": 2, "decay_per_day": 40},
+        {"building": "Bulletin Pole", "wellbeing_bonus_value": 2, "decay_per_day": 30},
+        {"building": "Decorative Clock", "wellbeing_bonus_value": 2, "decay_per_day": 30}
+      ],
+      "satisfaction_rate_per_hr": 64,
+      "max_value": 100,
+      "radius": "Proximity-based: the beaver must pass near/within range of the decoration. Exact tile radius not documented.",
+      "_radius_uncertain": true,
+      "notes": "Passive - beavers top up Aesthetics just by walking past decorations placed along paths. Only the strongest in-range decoration of the category counts (no stacking)."
+    },
+    {
+      "need": "Awe",
+      "source_buildings": [
+        {"building": "Farmer Monument (Folktails)", "wellbeing_bonus_value": 3, "decay_per_day": 30},
+        {"building": "Brazier of Bonding (Folktails)", "wellbeing_bonus_value": 5, "decay_per_day": 30},
+        {"building": "Fountain of Joy (Folktails)", "wellbeing_bonus_value": 8, "decay_per_day": 30},
+        {"building": "Earth Recultivator (Folktails wonder)", "wellbeing_bonus_value": 10, "decay_per_day": 1}
+      ],
+      "max_value": 100,
+      "radius": "Proximity to the monument. Exact radius not documented.",
+      "_radius_uncertain": true,
+      "notes": "High-value but expensive/late-game. Wonder-tier (Earth Recultivator) barely decays (-1/day) so a single visit sustains +10 for a long time."
+    },
+    {
+      "need": "Fun",
+      "source_buildings": [
+        {"building": "Detailer", "wellbeing_bonus_value": 1, "decay_per_day": 5, "max_value": 100},
+        {"building": "Lido (Folktails)", "wellbeing_bonus_value": 1, "decay_per_day": 20, "max_value": 100},
+        {"building": "Carousel (Folktails)", "wellbeing_bonus_value": 3, "decay_per_day": 10, "max_value": 100},
+        {"building": "Mud Pit (Folktails)", "wellbeing_bonus_value": 3, "decay_per_day": 10, "max_value": 100}
+      ],
+      "also_satisfied_by": "Reading Books (Folktails 'Knowledge'/library leisure).",
+      "max_value": 100,
+      "radius": "Beavers walk to and use the building during leisure time.",
+      "notes": "Lido double-dips: it satisfies Wet Fur AND Fun. Only the highest-tier Fun building visited counts."
+    },
+    {
+      "need": "Shelter / Housing",
+      "source_buildings": [
+        "Lodge (2x2, houses 3)",
+        "Mini Lodge (2x1, houses 1)",
+        "Double Lodge (2x2, houses 6)",
+        "Triple Lodge (2x3, houses 9)"
+      ],
+      "wellbeing_bonus_value": 1,
+      "wellbeing_modifier_range": [-3, 1],
+      "decay_per_day": 30,
+      "max_value": 80,
+      "radius": "n/a (beaver sleeps in an assigned dwelling)",
+      "notes": "A sheltered beaver gets up to +1 well-being; a homeless beaver gets up to -3 (net penalty). Also a hard gate on Folktails breeding. See survival_needs 'Shelter' for sleep effects."
+    },
+    {
+      "need": "Knowledge (Folktails-unique, leisure/reading)",
+      "source_buildings": ["Bookprinter (produces Books)", "Library-type building where beavers read Books"],
+      "wellbeing_bonus_value": null,
+      "_wellbeing_bonus_value_uncertain": true,
+      "decay_per_day": null,
+      "_decay_uncertain": true,
+      "max_value": 100,
+      "radius": "Beaver visits the reading building during leisure.",
+      "notes": "Folktails-specific. Reading Books contributes to leisure/Fun-type well-being. Provides a distinct advancement path vs Iron Teeth. Exact point values not confirmed for v1.0.x."
+    }
+  ],
+
+  "wellbeing_summary": {
+    "definition": "Well-Being is a per-beaver score = sum of the well-being bonus points from every satisfied need. Higher score unlocks stat bonuses. Reaching Well-Being 15 (Folktails) is required to unlock the Iron Teeth faction.",
+    "stacking_rule": "Within a single need category, only the highest-value satisfied source counts (a Campfire + Dance Hall do not add together). Across DIFFERENT categories (Social Life + Aesthetics + Fun + ...), the points add up.",
+    "base_lifespan_days": 50,
+    "base_lifespan_variance_pct": 10,
+    "bonus_thresholds": [
+      {"wellbeing_score": 1, "work_speed_pct": 0, "growth_speed_pct": 0, "movement_speed_pct": 0, "life_expectancy_pct": 0},
+      {"wellbeing_score": 2, "work_speed_pct": 5},
+      {"wellbeing_score": 5, "work_speed_pct": 20, "life_expectancy_pct": 5},
+      {"wellbeing_score": 10, "work_speed_pct": 40, "life_expectancy_pct": 10},
+      {"wellbeing_score": 15, "work_speed_pct": 60},
+      {"wellbeing_score": 20, "work_speed_pct": 80},
+      {"wellbeing_score": 25, "work_speed_pct": 100},
+      {"wellbeing_score": 30, "work_speed_pct": 120, "life_expectancy_pct": 35},
+      {"wellbeing_score": 35, "work_speed_pct": 140},
+      {"wellbeing_score": 40, "work_speed_pct": 160},
+      {"wellbeing_score": 45, "work_speed_pct": 180},
+      {"wellbeing_score": 50, "work_speed_pct": 200, "life_expectancy_pct": 60},
+      {"wellbeing_score": 55, "work_speed_pct": 220},
+      {"wellbeing_score": 60, "work_speed_pct": 240, "life_expectancy_pct": 70},
+      {"wellbeing_score": 70, "work_speed_pct": 260, "life_expectancy_pct": 75}
+    ],
+    "_bonus_thresholds_uncertain": true,
+    "bonus_notes": [
+      "Work Speed bonus applies to Adults; Growth Speed bonus applies to Kits (kits mature faster at higher well-being).",
+      "Movement Speed also improves with well-being though the wiki table is sparse on exact per-tier movement values.",
+      "Life Expectancy is the biggest lever: at very high well-being (70+) an adult can gain up to roughly +260 extra days of life on top of the ~50-day base.",
+      "Exact per-row mapping was partly reconstructed from the wiki table and should be treated as approximate."
+    ],
+    "min_wellbeing_to_grow_population": {
+      "value": 1,
+      "_uncertain": true,
+      "explanation": "Folktails breed as long as survival needs are met, there is free housing, and well-being is positive (>0). There is no hard high threshold, but higher well-being directly increases breeding SPEED. Negative conditions (starving/dehydrated) or no free housing halt breeding entirely."
+    }
+  },
+
+  "population_growth": {
+    "faction": "Folktails",
+    "mechanism": "Natural, housing-based breeding. Two Adult beavers sharing a dwelling can produce a Kit over time when conditions are favorable. New beavers are born as Kits.",
+    "requirements": [
+      "A dwelling (Lodge etc.) occupied by at least two Adults.",
+      "Free housing capacity for the new Kit (colony will not reproduce with no room).",
+      "Survival needs met - starvation or dehydration halts breeding.",
+      "Positive well-being - the higher the well-being, the faster kits appear."
+    ],
+    "rate": {
+      "description": "Probabilistic per occupied dwelling over time; scales up with well-being score and number of adult pairs / occupied dwellings. No fixed period documented.",
+      "_uncertain": true
+    },
+    "kit_maturation_days": 6,
+    "life_stages": ["Kit (matures in ~6 days)", "Adult (works, breeds)"],
+    "iron_teeth_contrast": "Iron Teeth do NOT breed naturally - they use industrial Breeding Pods, each sustaining ~10 beavers (scaling with life expectancy). Included only for contrast; the bot targets Folktails.",
+    "notes": "For Folktails, building more housing + raising well-being (Campfire, Mud Pit, food variety) directly accelerates growth."
+  }
+}

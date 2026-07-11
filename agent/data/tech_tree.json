@@ -1,0 +1,95 @@
+{
+  "_meta": {
+    "faction": "Folktails",
+    "game_version": "1.0.x",
+    "description": "Science/tech progression for a Folktails survival bootstrap. Costs verified from the official wiki (timberborn.wiki.gg) individual building pages where possible. Numbers marked with _uncertain reflect either conflicting sources or version-sensitive balance values that should be re-verified in-game.",
+    "sources": [
+      "https://timberborn.wiki.gg/wiki/Science_Points",
+      "https://timberborn.wiki.gg/wiki/Inventor",
+      "https://timberborn.wiki.gg/wiki/Forester",
+      "https://timberborn.wiki.gg/wiki/Water_Wheel",
+      "https://timberborn.wiki.gg/wiki/Windmill",
+      "https://timberborn.wiki.gg/wiki/Floodgate",
+      "https://timberborn.wiki.gg/wiki/Levee",
+      "https://timberborn.wiki.gg/wiki/Housing",
+      "https://timberborn.wiki.gg/wiki/Gravity_Battery",
+      "https://timberborn.wiki.gg/wiki/Category:Science"
+    ],
+    "notes": [
+      "Science is spent to permanently unlock a building/upgrade for the whole colony; it is not consumed per-placement.",
+      "A separate, larger science cost also unlocks the 'bot workplace' variant of many workplaces (e.g. Forester +500) so bots can operate them. Those bot-unlock costs are recorded under unlocks[].bot_unlock_cost where known.",
+      "Folktails Lodges both shelter and breed beavers (no separate breeding pod needed)."
+    ]
+  },
+
+  "science_production": [
+    {
+      "building": "Inventor",
+      "faction": "common",
+      "science_per_hour": 1,
+      "science_per_day": 16,
+      "_science_per_day_uncertain": true,
+      "_science_per_day_note": "Nominal wiki figure is 24/day (24h); realistic output is ~16/day because a worker only works ~16 game-hours. Rate is 1 SP per worked hour.",
+      "worker_slots": 1,
+      "power_hp": 0,
+      "inputs": [],
+      "build_cost": {"logs": 12},
+      "unlock_cost": 0,
+      "unlock_note": "Available at start"
+    },
+    {
+      "building": "Observatory",
+      "faction": "Folktails",
+      "science_per_hour_per_worker": 3.3,
+      "_science_per_hour_per_worker_uncertain": true,
+      "worker_slots": 4,
+      "power_hp": 200,
+      "inputs": [],
+      "build_cost": {"_uncertain": true},
+      "unlock_cost": 1000,
+      "unlock_note": "Folktails-exclusive high-throughput science building; backbone of mid/late science."
+    }
+  ],
+  "_science_production_note": "Bot factions/other science tools (Numbercruncher 1500, Bot Part Factory 500, Bot Assembler 750) exist but Numbercruncher is Iron Teeth; Inventor + Observatory are the Folktails science path.",
+
+  "unlocks": [
+    {"name": "Path / Stairs", "science_cost": 0, "prerequisites": [], "tier": "start", "note": "Free and instant, no materials."},
+    {"name": "Lumberjack Flag", "science_cost": 0, "prerequisites": [], "tier": "start", "note": "Fells trees inside a designated cutting area. Free to build."},
+    {"name": "Gatherer Flag", "science_cost": 0, "prerequisites": [], "tier": "start", "note": "Harvests berries/food from bushes and trees in range. Free to build."},
+    {"name": "Water Pump", "science_cost": 0, "prerequisites": [], "tier": "start", "build_cost": {"logs": 12}, "worker_slots": 1, "note": "Pumps drinking water up to 2 blocks deep."},
+    {"name": "Lodge", "science_cost": 0, "prerequisites": [], "tier": "start", "build_cost": {"logs": 12}, "capacity": 3, "note": "Basic housing + breeding."},
+    {"name": "Lumber Mill", "science_cost": 0, "_science_cost_uncertain": true, "prerequisites": [], "tier": "start", "build_cost": {"logs": 15}, "worker_slots": 1, "power_hp": 50, "produces": "planks from logs (~1.3h per plank, 1:1)", "note": "wiki.gg lists 'Available at start'; some guides list ~250 SP. Re-verify in-game."},
+    {"name": "Water Wheel", "science_cost": 0, "_science_cost_uncertain": true, "prerequisites": [], "tier": "start", "faction": "Folktails", "build_cost": {"logs": 50}, "power_output": "270 hp per m3/s of flow", "note": "Needs a double-width block of flowing water. Some guides list 50 SP; wiki.gg lists start."},
+    {"name": "Power Wheel", "science_cost": 0, "prerequisites": [], "tier": "start", "faction": "Folktails", "build_cost": {"logs": 20}, "power_output": "~50 hp (scales 38-85 with worker speed)", "note": "Beaver-operated backup power, works during droughts."},
+    {"name": "Farmhouse", "science_cost": 0, "prerequisites": [], "tier": "start", "build_cost": {"logs": 20}, "worker_slots": 2, "bot_unlock_cost": 500, "note": "Plants/harvests crops. Start with kohlrabi (edible raw)."},
+    {"name": "Dam", "science_cost": 0, "prerequisites": [], "tier": "start", "build_cost": {"logs": 20}, "note": "Blocks water, spillway at top. Log-heavy vs levees."},
+    {"name": "Large Pile", "science_cost": 0, "prerequisites": [], "tier": "start", "build_cost": {"logs": 6}, "capacity": 180, "note": "Open storage for logs/raw goods."},
+
+    {"name": "Forester", "science_cost": 30, "_science_cost_uncertain": true, "prerequisites": ["Inventor"], "tier": "early", "build_cost": {"logs": 10, "planks": 7}, "worker_slots": 1, "bot_unlock_cost": 500, "note": "Plants faction trees/bushes; auto-replants after lumberjacks. Sustainable wood."},
+    {"name": "Mini Lodge", "science_cost": 50, "prerequisites": [], "tier": "early", "build_cost": {"logs": 5}, "capacity": 1, "note": "Compact single-beaver housing."},
+    {"name": "Levee", "science_cost": 120, "prerequisites": [], "tier": "early", "build_cost": {"logs": 12}, "note": "Blocks water completely; stackable waterproof walls for reservoirs."},
+    {"name": "Wind Turbine (Windmill)", "science_cost": 120, "prerequisites": [], "tier": "early", "faction": "Folktails", "build_cost": {"logs": 20, "planks": 20}, "power_output": "up to 150 hp (needs >=30% wind)", "note": "Drought-independent power (keeps running when the river stops flowing)."},
+    {"name": "Floodgate", "science_cost": 150, "prerequisites": [], "tier": "early", "build_cost": {"logs": 10, "planks": 5}, "note": "Adjustable-height water barrier (0-1 in 0.05 steps) for reservoir control."},
+    {"name": "Double Lodge", "science_cost": 150, "prerequisites": [], "tier": "early", "build_cost": {"logs": 20}, "capacity": 6, "note": "Higher-density housing + breeding."},
+
+    {"name": "Triple Lodge", "science_cost": 250, "prerequisites": [], "tier": "mid", "build_cost": {"logs": 35}, "capacity": 9, "note": "Dense housing."},
+    {"name": "Gravity Battery", "science_cost": 400, "prerequisites": ["Lumber Mill", "Gear Workshop"], "tier": "mid", "faction": "common", "build_cost": {"planks": 40, "gears": 40, "metal_blocks": 10}, "power_storage": "4000+ hph (up to ~62000 excavated)", "note": "Stores power to run pumps/mills through droughts."},
+    {"name": "Bot Part Factory", "science_cost": 500, "prerequisites": [], "tier": "mid", "faction": "common", "note": "First step toward bot workforce."},
+    {"name": "Bot Assembler", "science_cost": 750, "prerequisites": ["Bot Part Factory"], "tier": "mid", "faction": "common", "note": "Builds bots. Some sources cite up to 10000 for the late variant; re-verify.", "_science_cost_uncertain": true},
+    {"name": "Observatory", "science_cost": 1000, "prerequisites": [], "tier": "mid", "faction": "Folktails", "power_hp": 200, "worker_slots": 4, "note": "Main mid/late science producer; requires a reliable power source."},
+
+    {"name": "Large Water Wheel", "science_cost": 200, "prerequisites": ["Lumber Mill"], "tier": "mid", "faction": "Iron_Teeth", "build_cost": {"logs": 70, "planks": 80}, "power_output": "540 hp per m3/s", "note": "Iron Teeth power option; listed for completeness, not Folktails."}
+  ],
+
+  "recommended_order": [
+    {"name": "Forester", "science_cost": 30, "rationale": "Replant felled trees so the wood supply is renewable instead of a one-time deforestation; cheapest high-impact unlock."},
+    {"name": "Mini Lodge", "science_cost": 50, "rationale": "Cheap early housing to grow the population and therefore the worker pool that everything else depends on."},
+    {"name": "Levee", "science_cost": 120, "rationale": "Waterproof stackable walls to cheaply wall off a drought reservoir without spending logs on Dams."},
+    {"name": "Wind Turbine (Windmill)", "science_cost": 120, "rationale": "Drought-proof power: water wheels stall when the river dries, so wind keeps pumps and mills running through dry seasons."},
+    {"name": "Floodgate", "science_cost": 150, "rationale": "Adjustable water control to fill and hold the reservoir at a chosen level; the core survival-water tool."},
+    {"name": "Double Lodge", "science_cost": 150, "rationale": "Denser housing/breeding once food and water buffers can support a larger colony."},
+    {"name": "Gravity Battery", "science_cost": 400, "rationale": "Bank surplus power (from wind/water) so critical pumps and mills survive extended droughts and badtides."},
+    {"name": "Observatory", "science_cost": 1000, "rationale": "Once survival infrastructure is stable, the Observatory multiplies science throughput to unlock the rest of the tree quickly."}
+  ],
+  "_recommended_order_note": "Survival-first ordering for Folktails. Start-tier buildings (Water Pump, Lumberjack Flag, Lumber Mill, Dam, Water Wheel, Farmhouse, Large Pile, Lodge) need no science and should be placed before spending any SP."
+}

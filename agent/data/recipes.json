@@ -1,0 +1,351 @@
+{
+  "_meta": {
+    "game": "Timberborn",
+    "version": "v1.0.x (Update 4 era, 2025/2026)",
+    "faction_focus": "Folktails + shared",
+    "source": "timberborn.wiki.gg",
+    "notes": "One entry per production recipe. amount = units per cycle. cycle_hours = in-game hours per production cycle. worker_slots = max workers. power_hp = power demand in horsepower (0 = none / transmits power). Crops use grow_days instead of cycle_hours (growth is time-based, harvest yields the listed output). Fields with _uncertain need in-game verification.",
+    "day_length_hours": 16
+  },
+  "recipes": [
+    {
+      "building": "Water Pump",
+      "inputs": [],
+      "outputs": [{"good": "Water", "amount": 1}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Pumps clean Water from an adjacent water source. Rate scales with worker efficiency up to ~1 Water/unit-time. Cycle time not listed on wiki.",
+      "_uncertain": true
+    },
+    {
+      "building": "Large Water Pump",
+      "inputs": [],
+      "outputs": [{"good": "Water", "amount": 5}],
+      "cycle_hours": null,
+      "worker_slots": 3,
+      "power_hp": 0,
+      "notes": "Max pump depth 4m, 60 internal Water storage. Output ~0.33->5 Water. Efficiency drops with badwater contamination. Cycle time not listed.",
+      "_uncertain": true
+    },
+    {
+      "building": "Gatherer Flag",
+      "inputs": [],
+      "outputs": [{"good": "Berries", "amount": 1}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Gatherer collects Berries/Chestnuts/Dandelions from wild bushes and trees within a ~40x41 tile radius; no fixed recipe. Per-plant yield ~0.25-0.40 units/day. 20 internal storage per good. BOOTSTRAP FOOD source.",
+      "_uncertain": true
+    },
+    {
+      "building": "Lumberjack Flag",
+      "inputs": [],
+      "outputs": [{"good": "Log", "amount": 1}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Lumberjacks fell trees designated for cutting (cutting is global in v1.0) and haul Logs back. Yield depends on tree type/count, not a fixed recipe. BOOTSTRAP RAW source.",
+      "_uncertain": true
+    },
+    {
+      "building": "Efficient Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "Carrots", "amount": 3}],
+      "cycle_hours": null,
+      "grow_days": 4,
+      "worker_slots": 3,
+      "power_hp": 0,
+      "notes": "Folktails land crop. Yield per harvested tile. Grow time ~4 days (~2.8 with Beehive). Eaten raw.",
+      "_uncertain": true
+    },
+    {
+      "building": "Efficient Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "Potatoes", "amount": 1}],
+      "cycle_hours": null,
+      "grow_days": 6,
+      "worker_slots": 3,
+      "power_hp": 0,
+      "notes": "Folktails land crop. Grow ~6 days (~4.2 with Beehive). Needs cooking at Grill.",
+      "_uncertain": true
+    },
+    {
+      "building": "Efficient Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "Wheat", "amount": 3}],
+      "cycle_hours": null,
+      "grow_days": 10,
+      "worker_slots": 3,
+      "power_hp": 0,
+      "notes": "Folktails land crop. Grow ~10 days (~7.0 with Beehive). Processed via Gristmill+Bakery.",
+      "_uncertain": true
+    },
+    {
+      "building": "Efficient Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "SunflowerSeeds", "amount": 2}],
+      "cycle_hours": null,
+      "grow_days": 5,
+      "worker_slots": 3,
+      "power_hp": 0,
+      "notes": "Folktails land crop (Sunflower). Grow ~5 days (~3.5 with Beehive). Eaten raw.",
+      "_uncertain": true
+    },
+    {
+      "building": "Aquatic Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "CattailRoot", "amount": 3}],
+      "cycle_hours": null,
+      "grow_days": 8,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails water crop. Grow ~8 days (~5.6 with Beehive). Processed via Gristmill+Bakery. Worker slots _uncertain.",
+      "_uncertain": true
+    },
+    {
+      "building": "Aquatic Farmhouse",
+      "inputs": [],
+      "outputs": [{"good": "Spadderdock", "amount": 3}],
+      "cycle_hours": null,
+      "grow_days": 12,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails water crop. Grow ~12 days (~8.4 with Beehive). Cooked at Grill. Worker slots _uncertain.",
+      "_uncertain": true
+    },
+    {
+      "building": "Grill",
+      "inputs": [{"good": "Potatoes", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "GrilledPotatoes", "amount": 4}],
+      "cycle_hours": 0.52,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails. Log used as cooking fuel."
+    },
+    {
+      "building": "Grill",
+      "inputs": [{"good": "Chestnuts", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "GrilledChestnuts", "amount": 2}],
+      "cycle_hours": 0.33,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Grill",
+      "inputs": [{"good": "Spadderdock", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "GrilledSpadderdock", "amount": 3}],
+      "cycle_hours": 0.4,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Gristmill",
+      "inputs": [{"good": "Wheat", "amount": 1}],
+      "outputs": [{"good": "WheatFlour", "amount": 1}],
+      "cycle_hours": 0.5,
+      "worker_slots": 1,
+      "power_hp": 60,
+      "notes": "Folktails. Needs power."
+    },
+    {
+      "building": "Gristmill",
+      "inputs": [{"good": "CattailRoot", "amount": 1}],
+      "outputs": [{"good": "CattailFlour", "amount": 1}],
+      "cycle_hours": 0.25,
+      "worker_slots": 1,
+      "power_hp": 60,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Bakery",
+      "inputs": [{"good": "WheatFlour", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "Bread", "amount": 5}],
+      "cycle_hours": 1.0,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails. Log used as baking fuel."
+    },
+    {
+      "building": "Bakery",
+      "inputs": [{"good": "CattailFlour", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "CattailCrackers", "amount": 4}],
+      "cycle_hours": 0.5,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Bakery",
+      "inputs": [{"good": "WheatFlour", "amount": 1}, {"good": "MapleSyrup", "amount": 1}, {"good": "Log", "amount": 0.1}],
+      "outputs": [{"good": "MaplePastries", "amount": 3}],
+      "cycle_hours": 1.5,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Folktails. Premium well-being food."
+    },
+    {
+      "building": "Lumber Mill",
+      "inputs": [{"good": "Log", "amount": 1}],
+      "outputs": [{"good": "Plank", "amount": 1}],
+      "cycle_hours": 1.3,
+      "worker_slots": 1,
+      "power_hp": 50,
+      "notes": "Core bootstrap material converter. BOOTSTRAP."
+    },
+    {
+      "building": "Gear Workshop",
+      "inputs": [{"good": "Plank", "amount": 1}],
+      "outputs": [{"good": "Gear", "amount": 1}],
+      "cycle_hours": 3.0,
+      "worker_slots": 1,
+      "power_hp": 120,
+      "notes": "10 Plank in / 10 Gear out internal storage."
+    },
+    {
+      "building": "Paper Mill",
+      "inputs": [{"good": "Log", "amount": 1}],
+      "outputs": [{"good": "Paper", "amount": 2}],
+      "cycle_hours": 1.6,
+      "worker_slots": 1,
+      "power_hp": 80,
+      "notes": "Folktails-exclusive. Input is Log, not Plank."
+    },
+    {
+      "building": "Printing Press",
+      "inputs": [{"good": "Paper", "amount": 1}],
+      "outputs": [{"good": "Book", "amount": 1}],
+      "cycle_hours": 1.5,
+      "worker_slots": 2,
+      "power_hp": 150,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Printing Press",
+      "inputs": [{"good": "Paper", "amount": 2}, {"good": "Plank", "amount": 1}],
+      "outputs": [{"good": "PunchCards", "amount": 2}],
+      "cycle_hours": 0.75,
+      "worker_slots": 2,
+      "power_hp": 150,
+      "notes": "Folktails."
+    },
+    {
+      "building": "Wood Workshop",
+      "inputs": [{"good": "Plank", "amount": 1}, {"good": "PineResin", "amount": 1}],
+      "outputs": [{"good": "TreatedPlank", "amount": 1}],
+      "cycle_hours": 3.0,
+      "worker_slots": 1,
+      "power_hp": 250,
+      "notes": "Makes Treated Planks (NOT the Refinery)."
+    },
+    {
+      "building": "Smelter",
+      "inputs": [{"good": "ScrapMetal", "amount": 2}, {"good": "Log", "amount": 0.2}],
+      "outputs": [{"good": "MetalBlock", "amount": 1}],
+      "cycle_hours": 2.0,
+      "worker_slots": 1,
+      "power_hp": 200,
+      "notes": "Log is fuel (~1 Log per 10 Scrap Metal smelted)."
+    },
+    {
+      "building": "Tapper's Shack",
+      "inputs": [],
+      "outputs": [{"good": "PineResin", "amount": 1}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Taps Pine trees within range for Pine Resin (gathering, no fixed recipe). Maple variant taps Maple trees for Maple Syrup.",
+      "_uncertain": true
+    },
+    {
+      "building": "Scavenger Flag",
+      "inputs": [],
+      "outputs": [{"good": "ScrapMetal", "amount": 1}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Collects Scrap Metal from surface Ruins within range. 20 internal storage. No fixed rate.",
+      "_uncertain": true
+    },
+    {
+      "building": "Mine",
+      "inputs": [{"good": "TreatedPlank", "amount": 1}],
+      "outputs": [{"good": "ScrapMetal", "amount": 5}],
+      "cycle_hours": 1.8,
+      "worker_slots": 10,
+      "power_hp": 0,
+      "notes": "Folktails. Built on Underground Ruins (5x5). 30 Treated Plank in / 150 Scrap Metal out storage."
+    },
+    {
+      "building": "Refinery",
+      "inputs": [{"good": "Water", "amount": 2}, {"good": "Carrots", "amount": 2}],
+      "outputs": [{"good": "Biofuel", "amount": 5}],
+      "cycle_hours": 3.0,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails. Biofuel from Carrots.",
+      "_uncertain": true
+    },
+    {
+      "building": "Refinery",
+      "inputs": [{"good": "Water", "amount": 2}, {"good": "Potatoes", "amount": 2}],
+      "outputs": [{"good": "Biofuel", "amount": 30}],
+      "cycle_hours": 3.0,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails. Biofuel yield (30) looks inconsistent vs other recipes; verify in-game.",
+      "_uncertain": true
+    },
+    {
+      "building": "Refinery",
+      "inputs": [{"good": "Water", "amount": 2}, {"good": "Spadderdock", "amount": 2}],
+      "outputs": [{"good": "Biofuel", "amount": 25}],
+      "cycle_hours": 3.0,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails. Biofuel yield (25) _uncertain.",
+      "_uncertain": true
+    },
+    {
+      "building": "Refinery",
+      "inputs": [{"good": "MapleSyrup", "amount": 1}, {"good": "Extract", "amount": 1}],
+      "outputs": [{"good": "Catalyst", "amount": 3}],
+      "cycle_hours": 3.0,
+      "worker_slots": 2,
+      "power_hp": 0,
+      "notes": "Folktails. Catalyst for bot/advanced chain.",
+      "_uncertain": true
+    },
+    {
+      "building": "Explosives Factory",
+      "inputs": [{"good": "Badwater", "amount": 5}],
+      "outputs": [{"good": "Explosives", "amount": 1}],
+      "cycle_hours": 3.0,
+      "worker_slots": 1,
+      "power_hp": 150,
+      "notes": "Consumes ~1.667 Badwater/hr; cycle inferred ~3h.",
+      "_uncertain": true
+    },
+    {
+      "building": "Explosives Factory",
+      "inputs": [{"good": "Badwater", "amount": 1}],
+      "outputs": [{"good": "Fireworks", "amount": 3}],
+      "cycle_hours": null,
+      "worker_slots": 1,
+      "power_hp": 150,
+      "notes": "Yield ranges ~3-10 Fireworks; cycle time not listed.",
+      "_uncertain": true
+    },
+    {
+      "building": "Inventor",
+      "inputs": [],
+      "outputs": [{"good": "SciencePoints", "amount": 1}],
+      "cycle_hours": 1.0,
+      "worker_slots": 1,
+      "power_hp": 0,
+      "notes": "Generates 1 Science Point per hour, no material input. 12 Log build cost. Folktails also has the more efficient Observatory. BOOTSTRAP SCIENCE."
+    }
+  ]
+}

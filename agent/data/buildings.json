@@ -1,0 +1,5382 @@
+{
+  "version": "1.0.13.1",
+  "source": "Timberborn v1.0.13.1 running-game /blueprints id list (bridge) + repo docs/kb curated catalog (buildings-catalog.md, buildings-food.md, buildings-water.md, buildings-housing-science.md, production-chains.md, mechanics-numbers.md; cross-referenced to timberborn.wiki.gg) + targeted timberborn.wiki.gg fetches (Aquifer Drill, Geothermal Engine, Centrifuge, Badwater Dome, Earth Recultivator, Shower, Teeth Grindstone). Fields marked _uncertain or listed in _uncertain_fields are unverified against game blueprints.",
+  "faction": "Folktails",
+  "notes": "Covers all building:true blueprint ids from the bridge (157). Non-building blueprint ids (crops, trees, water sources, ruins, relics, natural terrain) are intentionally excluded. Goods vocabulary: log, plank, gear, treated_plank, metal_block, scrap_metal, paper, book, punch_card, pine_resin, maple_syrup, water, badwater, extract, catalyst, biofuel, explosives, dirt, bot_part, bot, science_point, and food goods (carrot/potato/wheat/sunflower/cattail/spadderdock/chestnut/dandelion, flours, bread, crackers, pastries, grilled_*). Power in hamsterpower (hp).",
+  "buildings": [
+    {
+      "id": "DistrictCenter.Folktails",
+      "display_name": "District Center",
+      "category": "district",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 5
+      },
+      "build_cost": [],
+      "worker_slots": 4,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Colony hub; holds starting goods; employs 4 builders/haulers. Placed free at start. Transmits power. Path efficiency drops (green->red) beyond ~70 path-tiles; no hard cap."
+    },
+    {
+      "id": "BuildersHut.Folktails",
+      "display_name": "Builders' Hut",
+      "category": "district",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 4,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Adds +4 builders; workers reach ~10 tiles off a connected path. Transmits power."
+    },
+    {
+      "id": "HaulingPost.Folktails",
+      "display_name": "Hauling Post",
+      "category": "district",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 10,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Haulers carry 2x (28 vs 14); frees other workers from hauling. Transmits power. Science cost _uncertain.",
+      "_uncertain_fields": [
+        "science_cost"
+      ]
+    },
+    {
+      "id": "DistrictCrossing.Folktails",
+      "display_name": "District Crossing",
+      "category": "district",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 30
+        },
+        {
+          "good": "plank",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 10,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Exchanges goods between two districts; place on the shared border. Up to ~10 haulers per side. worker_slots is per-side and _uncertain.",
+      "_uncertain_fields": [
+        "worker_slots"
+      ]
+    },
+    {
+      "id": "Path",
+      "display_name": "Path",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Built instantly, no builder, free. Everything needs path access to operate. Power does NOT flow through paths."
+    },
+    {
+      "id": "Stairs.Folktails",
+      "display_name": "Stairs",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 1
+        },
+        {
+          "good": "plank",
+          "amount": 4
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 70,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Moves beavers +/-1 level; counts as 1 tile for range; works underwater. Height _uncertain."
+    },
+    {
+      "id": "SpiralStairs.Folktails",
+      "display_name": "Spiral Stairs",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 1
+        },
+        {
+          "good": "treated_plank",
+          "amount": 4
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 350,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Compact vertical climb. Height _uncertain."
+    },
+    {
+      "id": "Platform.Folktails",
+      "display_name": "Platform",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 6
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Buildable-on deck: most buildings can sit on top (build path on top separately)."
+    },
+    {
+      "id": "DoublePlatform.Folktails",
+      "display_name": "Double Platform",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 8
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "2-high platform; stairs fit underneath."
+    },
+    {
+      "id": "TriplePlatform.Folktails",
+      "display_name": "Triple Platform",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 200,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "3-high platform."
+    },
+    {
+      "id": "MetalPlatform3x3.Folktails",
+      "display_name": "Large Metal Platform 3x3",
+      "category": "paths",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "metal_block",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilever platform supported from a central 1x1. Support geometry _uncertain.",
+      "_uncertain_fields": [
+        "notes"
+      ]
+    },
+    {
+      "id": "MetalPlatform5x5.Folktails",
+      "display_name": "Large Metal Platform 5x5",
+      "category": "paths",
+      "footprint": {
+        "x": 5,
+        "y": 5,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "metal_block",
+          "amount": 90
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 2000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilever platform supported from a central 1x1. Support geometry _uncertain.",
+      "_uncertain_fields": [
+        "notes"
+      ]
+    },
+    {
+      "id": "SuspensionBridge1x1.Folktails",
+      "display_name": "Suspension Bridge 1x1",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 4
+        },
+        {
+          "good": "plank",
+          "amount": 4
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SuspensionBridge2x1.Folktails",
+      "display_name": "Suspension Bridge 2x1",
+      "category": "paths",
+      "footprint": {
+        "x": 2,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 8
+        },
+        {
+          "good": "plank",
+          "amount": 8
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SuspensionBridge3x1.Folktails",
+      "display_name": "Suspension Bridge 3x1",
+      "category": "paths",
+      "footprint": {
+        "x": 3,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        },
+        {
+          "good": "plank",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 450,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SuspensionBridge4x1.Folktails",
+      "display_name": "Suspension Bridge 4x1",
+      "category": "paths",
+      "footprint": {
+        "x": 4,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 16
+        },
+        {
+          "good": "plank",
+          "amount": 16
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SuspensionBridge5x1.Folktails",
+      "display_name": "Suspension Bridge 5x1",
+      "category": "paths",
+      "footprint": {
+        "x": 5,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 750,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SuspensionBridge6x1.Folktails",
+      "display_name": "Suspension Bridge 6x1",
+      "category": "paths",
+      "footprint": {
+        "x": 6,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 24
+        },
+        {
+          "good": "plank",
+          "amount": 24
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 900,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Spans a gap; anchor both ends. Nothing can be built on top. Cost and science scale with length; both _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Overhang2x1.Folktails",
+      "display_name": "Overhang 2x1",
+      "category": "paths",
+      "footprint": {
+        "x": 2,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 8
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilevered walkway/ledge anchored at one end. Cost and science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Overhang3x1.Folktails",
+      "display_name": "Overhang 3x1",
+      "category": "paths",
+      "footprint": {
+        "x": 3,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilevered walkway/ledge anchored at one end. Cost and science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Overhang4x1.Folktails",
+      "display_name": "Overhang 4x1",
+      "category": "paths",
+      "footprint": {
+        "x": 4,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 16
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilevered walkway/ledge anchored at one end. Cost and science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Overhang5x1.Folktails",
+      "display_name": "Overhang 5x1",
+      "category": "paths",
+      "footprint": {
+        "x": 5,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilevered walkway/ledge anchored at one end. Cost and science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Overhang6x1.Folktails",
+      "display_name": "Overhang 6x1",
+      "category": "paths",
+      "footprint": {
+        "x": 6,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 24
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cantilevered walkway/ledge anchored at one end. Cost and science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Tunnel.Folktails",
+      "display_name": "Tunnel",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 6
+        },
+        {
+          "good": "explosives",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 2000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Bores a 1x1 walkway through terrain. Exact cost/extras _uncertain.",
+      "_uncertain_fields": [
+        "build_cost"
+      ]
+    },
+    {
+      "id": "ZiplineStation.Folktails",
+      "display_name": "Zipline Station",
+      "category": "paths",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "metal_block",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 700,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Beaver fast-travel (~2.5x); link stations via pylons/beams."
+    },
+    {
+      "id": "ZiplinePylon.Folktails",
+      "display_name": "Zipline Pylon",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        },
+        {
+          "good": "metal_block",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Zipline line support; can stand in water."
+    },
+    {
+      "id": "ZiplineBeam.Folktails",
+      "display_name": "Zipline Beam",
+      "category": "paths",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        },
+        {
+          "good": "metal_block",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Horizontal zipline connector."
+    },
+    {
+      "id": "Lodge.Folktails",
+      "display_name": "Lodge",
+      "category": "housing",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "3 beds. Folktails breed inside (>=2 adults, no critical need, free bed). Stackable; transmits power."
+    },
+    {
+      "id": "MiniLodge.Folktails",
+      "display_name": "Mini Lodge",
+      "category": "housing",
+      "footprint": {
+        "x": 2,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 50,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "1 bed; NO breeding (needs a pair). Gap filler. Transmits power."
+    },
+    {
+      "id": "DoubleLodge.Folktails",
+      "display_name": "Double Lodge",
+      "category": "housing",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "6 beds; entrance is 1 block UP -> needs path/stairs at +1. Can stand in 1-deep water. Transmits power."
+    },
+    {
+      "id": "TripleLodge.Folktails",
+      "display_name": "Triple Lodge",
+      "category": "housing",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 35
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "9 beds; densest Folktails housing; entrance +1 up; can stand in 1-deep water. Transmits power."
+    },
+    {
+      "id": "GathererFlag.Folktails",
+      "display_name": "Gatherer Flag",
+      "category": "food",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Free. Picks wild bush/tree food (berries/chestnuts/dandelion) in a ~40x41 area. Day-1 food. Stores gathered food."
+    },
+    {
+      "id": "EfficientFarmHouse.Folktails",
+      "display_name": "Efficient Farmhouse",
+      "category": "food",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 25
+        }
+      ],
+      "worker_slots": 3,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Plants+harvests land crops (carrot/potato/wheat/sunflower) on irrigated soil in range; stores ~50 each. Starter tech."
+    },
+    {
+      "id": "AquaticFarmhouse.Folktails",
+      "display_name": "Aquatic Farmhouse",
+      "category": "food",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 30
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 2,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Grows cattail + spadderdock on submerged/shallow-water tiles; place at water edge, workers use stairs."
+    },
+    {
+      "id": "Beehive.Folktails",
+      "display_name": "Beehive",
+      "category": "food",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 10
+        },
+        {
+          "good": "plank",
+          "amount": 15
+        },
+        {
+          "good": "paper",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "~30% faster crop growth for <=39 nearby crops (pulses every 2h, 24h per-crop cooldown); small bee-sting risk."
+    },
+    {
+      "id": "Forester.Folktails",
+      "display_name": "Forester",
+      "category": "forestry",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 10
+        },
+        {
+          "good": "plank",
+          "amount": 7
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 30,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Plants trees/bushes (birch/pine/oak/maple/chestnut/dandelion) in ~21x20 range. Keep 1 Forester per ~4 Lumberjack Flags."
+    },
+    {
+      "id": "Grill.Folktails",
+      "display_name": "Grill",
+      "category": "food",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 25
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "potato",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "grilled_potato",
+              "amount": 4
+            }
+          ],
+          "cycle_hours": 0.52
+        },
+        {
+          "inputs": [
+            {
+              "good": "chestnut",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "grilled_chestnut",
+              "amount": 2
+            }
+          ],
+          "cycle_hours": 0.33
+        },
+        {
+          "inputs": [
+            {
+              "good": "spadderdock",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "grilled_spadderdock",
+              "amount": 3
+            }
+          ],
+          "cycle_hours": 0.4
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Cooks one recipe at a time. Starter tech (bot workplace variant ~750 sci). Transmits power."
+    },
+    {
+      "id": "Gristmill.Folktails",
+      "display_name": "Gristmill",
+      "category": "food",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 40
+        },
+        {
+          "good": "plank",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 180,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 60
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "wheat",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "wheat_flour",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.5
+        },
+        {
+          "inputs": [
+            {
+              "good": "cattail_root",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "cattail_flour",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.25
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 60 hp power."
+    },
+    {
+      "id": "Bakery.Folktails",
+      "display_name": "Bakery",
+      "category": "food",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        },
+        {
+          "good": "plank",
+          "amount": 15
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 160,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "wheat_flour",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "bread",
+              "amount": 5
+            }
+          ],
+          "cycle_hours": 1.0
+        },
+        {
+          "inputs": [
+            {
+              "good": "cattail_flour",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "cattail_crackers",
+              "amount": 4
+            }
+          ],
+          "cycle_hours": 0.5
+        },
+        {
+          "inputs": [
+            {
+              "good": "wheat_flour",
+              "amount": 1
+            },
+            {
+              "good": "maple_syrup",
+              "amount": 1
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "maple_pastry",
+              "amount": 3
+            }
+          ],
+          "cycle_hours": 1.5
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Power consumption _uncertain (may transmit only / low draw).",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "LumberjackFlag.Folktails",
+      "display_name": "Lumberjack Flag",
+      "category": "forestry",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Free. Fells trees marked for cutting (global designation) within ~18-21 tiles; ~1 tree/1.2h. Stores 20 logs. Bootstrap-critical."
+    },
+    {
+      "id": "LumberMill.Folktails",
+      "display_name": "Lumber Mill",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 50
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "log",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "plank",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.3
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 50 hp power. ~0.77 plank/h. Starter tech."
+    },
+    {
+      "id": "GearWorkshop.Folktails",
+      "display_name": "Gear Workshop",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        },
+        {
+          "good": "plank",
+          "amount": 25
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 120
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "plank",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "gear",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 3.0
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 120 hp power. ~0.33 gear/h."
+    },
+    {
+      "id": "PaperMill.Folktails",
+      "display_name": "Paper Mill",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 40
+        },
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 80
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "log",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "paper",
+              "amount": 2
+            }
+          ],
+          "cycle_hours": 1.6
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 80 hp power."
+    },
+    {
+      "id": "WoodWorkshop.Folktails",
+      "display_name": "Wood Workshop",
+      "category": "industry",
+      "footprint": {
+        "x": 4,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 40
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 800,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 250
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "pine_resin",
+              "amount": 1
+            },
+            {
+              "good": "plank",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "treated_plank",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 3.0
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 250 hp power."
+    },
+    {
+      "id": "TappersShack.Folktails",
+      "display_name": "Tapper's Shack",
+      "category": "forestry",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Taps mature standing pines (pine resin) and maples (maple syrup) in range; do NOT chop those trees."
+    },
+    {
+      "id": "PrintingPress.Folktails",
+      "display_name": "Printing Press",
+      "category": "industry",
+      "footprint": {
+        "x": 4,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 50
+        },
+        {
+          "good": "gear",
+          "amount": 30
+        },
+        {
+          "good": "metal_block",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 2,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 150
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "paper",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "book",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        },
+        {
+          "inputs": [
+            {
+              "good": "paper",
+              "amount": 1
+            },
+            {
+              "good": "plank",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "punch_card",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Makes books and punch cards (for logic/HTTP). Exact recipe amounts/cycle _uncertain."
+    },
+    {
+      "id": "ScavengerFlag.Folktails",
+      "display_name": "Scavenger Flag",
+      "category": "industry",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [],
+      "worker_slots": 1,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Free to build. Collects scrap metal from surface ruins in a ~40x41 range."
+    },
+    {
+      "id": "Mine.Folktails",
+      "display_name": "Mine",
+      "category": "industry",
+      "footprint": {
+        "x": 5,
+        "y": 5,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 250
+        },
+        {
+          "good": "gear",
+          "amount": 350
+        },
+        {
+          "good": "treated_plank",
+          "amount": 200
+        }
+      ],
+      "worker_slots": 10,
+      "science_cost": 4000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "treated_plank",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "scrap_metal",
+              "amount": 5
+            }
+          ],
+          "cycle_hours": 1.8
+        }
+      ],
+      "prerequisites": [
+        "Underground Ruins tile"
+      ],
+      "notes": "Must be placed on an Underground Ruins tile. Prereq: Underground Ruins on map."
+    },
+    {
+      "id": "Smelter.Folktails",
+      "display_name": "Smelter",
+      "category": "industry",
+      "footprint": {
+        "x": 2,
+        "y": 4,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 50
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        },
+        {
+          "good": "scrap_metal",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 200
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "scrap_metal",
+              "amount": 2
+            },
+            {
+              "good": "log",
+              "amount": 0.2
+            }
+          ],
+          "outputs": [
+            {
+              "good": "metal_block",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 2.0
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Needs 200 hp power."
+    },
+    {
+      "id": "Refinery.Folktails",
+      "display_name": "Refinery",
+      "category": "industry",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 30
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        },
+        {
+          "good": "metal_block",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 2,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "potato",
+              "amount": 2
+            },
+            {
+              "good": "water",
+              "amount": 2
+            }
+          ],
+          "outputs": [
+            {
+              "good": "biofuel",
+              "amount": 30
+            }
+          ],
+          "cycle_hours": 2.0,
+          "_uncertain": true
+        },
+        {
+          "inputs": [
+            {
+              "good": "maple_syrup",
+              "amount": 1
+            },
+            {
+              "good": "extract",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "catalyst",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 2.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Food+water -> biofuel (bots); syrup+extract -> catalyst. Transmits power. Recipe amounts/cycle _uncertain."
+    },
+    {
+      "id": "Centrifuge.Folktails",
+      "display_name": "Centrifuge",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 60
+        },
+        {
+          "good": "gear",
+          "amount": 40
+        },
+        {
+          "good": "metal_block",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 2,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 200
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "badwater",
+              "amount": 4
+            },
+            {
+              "good": "log",
+              "amount": 0.1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "extract",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.75
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Extracts 'extract' from badwater. Bot workplace variant unlocks at ~1500 sci."
+    },
+    {
+      "id": "ExplosivesFactory.Folktails",
+      "display_name": "Explosives Factory",
+      "category": "industry",
+      "footprint": {
+        "x": 4,
+        "y": 2,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 30
+        },
+        {
+          "good": "gear",
+          "amount": 30
+        },
+        {
+          "good": "metal_block",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 150
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "badwater",
+              "amount": 6
+            }
+          ],
+          "outputs": [
+            {
+              "good": "explosives",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.5,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Turns badwater into explosives. Cost/recipe amounts _uncertain.",
+      "_uncertain_fields": [
+        "build_cost"
+      ]
+    },
+    {
+      "id": "Dynamite.Folktails",
+      "display_name": "Dynamite",
+      "category": "industry",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "explosives",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Consumable: detonates to destroy 1 terrain block below; chains sideways. Placed like a building then consumed."
+    },
+    {
+      "id": "DoubleDynamite.Folktails",
+      "display_name": "Double Dynamite",
+      "category": "industry",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "explosives",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Digs 2 blocks deep. Science/cost _uncertain.",
+      "_uncertain_fields": [
+        "science_cost",
+        "build_cost"
+      ]
+    },
+    {
+      "id": "TripleDynamite.Folktails",
+      "display_name": "Triple Dynamite",
+      "category": "industry",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "explosives",
+          "amount": 3
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Digs 3 blocks deep. Science/cost _uncertain.",
+      "_uncertain_fields": [
+        "science_cost",
+        "build_cost"
+      ]
+    },
+    {
+      "id": "DirtExcavator.Folktails",
+      "display_name": "Dirt Excavator",
+      "category": "industry",
+      "footprint": {
+        "x": 5,
+        "y": 6,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "gear",
+          "amount": 100
+        },
+        {
+          "good": "treated_plank",
+          "amount": 100
+        },
+        {
+          "good": "metal_block",
+          "amount": 50
+        }
+      ],
+      "worker_slots": 4,
+      "science_cost": 2000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 200
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "dirt",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Digs dirt from a 5x5 area; needs water access. Recipe/rate _uncertain."
+    },
+    {
+      "id": "EarthRecultivator.Folktails",
+      "display_name": "Earth Recultivator",
+      "category": "monuments",
+      "footprint": {
+        "x": 7,
+        "y": 7,
+        "z": 8
+      },
+      "build_cost": [
+        {
+          "good": "gear",
+          "amount": 2000
+        },
+        {
+          "good": "treated_plank",
+          "amount": 2000
+        },
+        {
+          "good": "metal_block",
+          "amount": 1500
+        }
+      ],
+      "worker_slots": 10,
+      "science_cost": 20000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "paper",
+              "amount": 500
+            },
+            {
+              "good": "extract",
+              "amount": 500
+            }
+          ],
+          "outputs": [
+            {
+              "good": "seed_launch",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Wonder-tier Awe monument (+10 well-being, 40-tile radius); consumes 500 paper + 500 extract per relaunch. Bot workplace +5000 sci."
+    },
+    {
+      "id": "WaterPump.Folktails",
+      "display_name": "Water Pump",
+      "category": "water",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "water",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.33,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Water-facing block must overhang water <=2 deep; 15 internal buffer; ~48 water/day. Unpowered. Bootstrap-critical."
+    },
+    {
+      "id": "LargeWaterPump.Folktails",
+      "display_name": "Large Water Pump",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 4,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 5
+        },
+        {
+          "good": "treated_plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 3,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "water",
+              "amount": 5
+            }
+          ],
+          "cycle_hours": 0.33,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "~5x a Water Pump; depth <=4; 60 internal buffer. Unpowered."
+    },
+    {
+      "id": "BadwaterPump.Folktails",
+      "display_name": "Badwater Pump",
+      "category": "water",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        },
+        {
+          "good": "metal_block",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "badwater",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.33,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Pumps badwater (for Explosives/Centrifuge); depth <=2. Unpowered."
+    },
+    {
+      "id": "BadwaterRig.Folktails",
+      "display_name": "Badwater Rig",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "gear",
+          "amount": 400
+        },
+        {
+          "good": "treated_plank",
+          "amount": 200
+        },
+        {
+          "good": "metal_block",
+          "amount": 150
+        }
+      ],
+      "worker_slots": 10,
+      "science_cost": 4000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "badwater",
+              "amount": 40
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [
+        "Badwater Source tile"
+      ],
+      "notes": "Must sit ON a Badwater Source; seals it; ~40 badwater/h."
+    },
+    {
+      "id": "BadwaterDome.Folktails",
+      "display_name": "Badwater Dome",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 100
+        },
+        {
+          "good": "gear",
+          "amount": 200
+        },
+        {
+          "good": "metal_block",
+          "amount": 100
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [
+        "Badwater Source tile"
+      ],
+      "notes": "Seals a Badwater Source; can be opened/closed at will. Cheaper alternative to Badwater Rig but needs separate Badwater Pumps to extract."
+    },
+    {
+      "id": "MechanicalFluidPump.Folktails",
+      "display_name": "Mechanical Water Pump",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "gear",
+          "amount": 50
+        },
+        {
+          "good": "treated_plank",
+          "amount": 25
+        },
+        {
+          "good": "metal_block",
+          "amount": 25
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 2500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 700
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "water",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 0.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "High-volume powered pump (~0.25 m3/s); base doubles as a 3-block levee. Rate _uncertain."
+    },
+    {
+      "id": "AquiferDrill.Folktails",
+      "display_name": "Aquifer Drill",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 25
+        },
+        {
+          "good": "metal_block",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 400
+      },
+      "production": [],
+      "prerequisites": [
+        "Aquifer tile"
+      ],
+      "notes": "Extracts water from an Aquifer tile (creates a new water source). worker_slots _uncertain (likely 0/unmanned). Output rate _uncertain.",
+      "_uncertain_fields": [
+        "worker_slots"
+      ]
+    },
+    {
+      "id": "AncientAquiferDrill",
+      "display_name": "Ancient Aquifer Drill",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 25
+        },
+        {
+          "good": "metal_block",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 400
+      },
+      "production": [],
+      "prerequisites": [
+        "Aquifer tile"
+      ],
+      "notes": "Map-provided/ruined Aquifer Drill variant (repairable). Stats mirror Aquifer Drill; cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "FluidDump.Folktails",
+      "display_name": "Fluid Dump",
+      "category": "water",
+      "footprint": {
+        "x": 2,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 10
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "water",
+              "amount": 3
+            }
+          ],
+          "outputs": [
+            {
+              "good": "water_flow",
+              "amount": 3
+            }
+          ],
+          "cycle_hours": 0.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Releases stored fluid as flow (irrigation puddles); 15 buffer; stops at ~0.5m below outlet."
+    },
+    {
+      "id": "SmallTank.Folktails",
+      "display_name": "Small Tank",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Holds 30 water; evaporation-proof & contamination-proof. Starter tech."
+    },
+    {
+      "id": "MediumTank.Folktails",
+      "display_name": "Medium Tank",
+      "category": "water",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 30
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 120,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Holds 300 water; evaporation/contamination-proof."
+    },
+    {
+      "id": "LargeTank.Folktails",
+      "display_name": "Large Tank",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 80
+        },
+        {
+          "good": "gear",
+          "amount": 60
+        },
+        {
+          "good": "metal_block",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 600,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Holds 1200 water; evaporation/contamination-proof."
+    },
+    {
+      "id": "Dam.Folktails",
+      "display_name": "Dam",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Raises water ~0.65 block then spills over the top. NOT stackable. Cost _uncertain.",
+      "_uncertain_fields": [
+        "build_cost"
+      ]
+    },
+    {
+      "id": "Levee.Folktails",
+      "display_name": "Levee",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 120,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "100% waterproof wall; STACKABLE to any height; buildable-on. Science _uncertain.",
+      "_uncertain_fields": [
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Floodgate.Folktails",
+      "display_name": "Floodgate",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 10
+        },
+        {
+          "good": "plank",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Adjustable gate, threshold 0.00-1.00 in 0.05 steps; adjacent gates sync."
+    },
+    {
+      "id": "DoubleFloodgate.Folktails",
+      "display_name": "Double Floodgate",
+      "category": "water",
+      "footprint": {
+        "x": 2,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "2-wide floodgate (span, not extra height). Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "TripleFloodgate.Folktails",
+      "display_name": "Triple Floodgate",
+      "category": "water",
+      "footprint": {
+        "x": 3,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 30
+        },
+        {
+          "good": "plank",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "3-wide floodgate. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Sluice.Folktails",
+      "display_name": "Sluice",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "metal_block",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Auto gate: closes on contamination >5% or by a downstream-depth rule; badtide automation."
+    },
+    {
+      "id": "Valve.Folktails",
+      "display_name": "Valve",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "metal_block",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "One-way fluid valve (lets water pass one direction). Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "FillValve.Folktails",
+      "display_name": "Fill Valve",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "metal_block",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Fills to a set level then closes (auto reservoir top-up). Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "ContaminationBarrier.Folktails",
+      "display_name": "Contamination Barrier",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "metal_block",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Blocks soil-contamination spread; must be on ground."
+    },
+    {
+      "id": "ImpermeableFloor.Folktails",
+      "display_name": "Impermeable Floor",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        },
+        {
+          "good": "metal_block",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Waterproof floor tile: blocks water/moisture passing through terrain. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "TerrainBlock.Folktails",
+      "display_name": "Terrain Block",
+      "category": "water",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "dirt",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Places a solid dirt terrain block (terraforming); consumes dirt. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "PowerWheel.Folktails",
+      "display_name": "Power Wheel",
+      "category": "power",
+      "footprint": {
+        "x": 3,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 50,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Beaver-powered treadmill; output scales with speed (~35-85 hp, ~50 nominal). Day-1 power. produced_hp is nominal.",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "WaterWheel.Folktails",
+      "display_name": "Water Wheel",
+      "category": "power",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 50
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 270,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "No worker. Needs flowing water underneath; output ~270 hp per 1 m3/s of current; STOPS in drought. produced_hp is per-flow nominal.",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "WindTurbine.Folktails",
+      "display_name": "Wind Turbine",
+      "category": "power",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 120,
+      "power": {
+        "produced_hp": 68,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "1x1 base; only 3x3 at heights 2-4. Output 0-150 hp (avg ~68), wind >=30%. Does NOT transmit power. produced_hp is average.",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "LargeWindTurbine.Folktails",
+      "display_name": "Large Wind Turbine",
+      "category": "power",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 5
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        },
+        {
+          "good": "paper",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1400,
+      "power": {
+        "produced_hp": 144,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "1x1 base. Output 0-300 hp (avg ~144), wind >=20%. produced_hp is average.",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "GeothermalEngine.Folktails",
+      "display_name": "Geothermal Engine",
+      "category": "power",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 50
+        },
+        {
+          "good": "plank",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 160,
+      "power": {
+        "produced_hp": 400,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [
+        "Geothermal Field tile"
+      ],
+      "notes": "Must be placed on a Geothermal Field; generates endless 400 hp continuously, no worker/path needed."
+    },
+    {
+      "id": "GravityBattery.Folktails",
+      "display_name": "Gravity Battery",
+      "category": "power",
+      "footprint": {
+        "x": 1,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 40
+        },
+        {
+          "good": "metal_block",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Energy store: 4000 hph flat +2000 hph per empty block below the weight (max ~62000 hph at 29-deep drop). Place on a cliff/platform edge. Not a generator."
+    },
+    {
+      "id": "PowerShaft.Folktails",
+      "display_name": "Power Shaft",
+      "category": "power",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Horizontal power link; transmits power. Stack for walls of shafts."
+    },
+    {
+      "id": "VerticalPowerShaft.Folktails",
+      "display_name": "Vertical Power Shaft",
+      "category": "power",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 2
+        },
+        {
+          "good": "plank",
+          "amount": 2
+        },
+        {
+          "good": "gear",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 40,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Transmits power. The ONLY way to route power straight up/down."
+    },
+    {
+      "id": "Clutch.Folktails",
+      "display_name": "Clutch",
+      "category": "power",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "gear",
+          "amount": 5
+        },
+        {
+          "good": "metal_block",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 400,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Power-network switch: engages/disengages a power line (logic-controllable). Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "DevPowerGenerator",
+      "display_name": "Dev Power Generator",
+      "category": "power",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 1000,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "DEVELOPER/DEBUG building, not available in normal play. Infinite power source used for testing. Not faction-suffixed.",
+      "_uncertain_fields": [
+        "footprint",
+        "power"
+      ]
+    },
+    {
+      "id": "Inventor.Folktails",
+      "display_name": "Inventor",
+      "category": "science",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 12
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "science_point",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.0
+        }
+      ],
+      "prerequisites": [],
+      "notes": "1 science point/h (~16/day). Only start-game science source. Build early."
+    },
+    {
+      "id": "Observatory.Folktails",
+      "display_name": "Observatory",
+      "category": "science",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 80
+        },
+        {
+          "good": "gear",
+          "amount": 30
+        },
+        {
+          "good": "pine_resin",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 4,
+      "science_cost": 1000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 200
+      },
+      "production": [
+        {
+          "inputs": [],
+          "outputs": [
+            {
+              "good": "science_point",
+              "amount": 13.3
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "~13.3 science/h (3.3 per worker); best Folktails science. Power draw _uncertain.",
+      "_uncertain_fields": [
+        "power"
+      ]
+    },
+    {
+      "id": "BotPartFactory.Folktails",
+      "display_name": "Bot Part Factory",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 50
+        },
+        {
+          "good": "gear",
+          "amount": 25
+        },
+        {
+          "good": "metal_block",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 150
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "metal_block",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "bot_part",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 2.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Makes bot heads/chassis/limbs (bot parts). Recipe amounts/cycle _uncertain."
+    },
+    {
+      "id": "BotAssembler.Folktails",
+      "display_name": "Bot Assembler",
+      "category": "industry",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 100
+        },
+        {
+          "good": "gear",
+          "amount": 50
+        },
+        {
+          "good": "metal_block",
+          "amount": 50
+        }
+      ],
+      "worker_slots": 2,
+      "science_cost": 750,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 250
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "bot_part",
+              "amount": 3
+            }
+          ],
+          "outputs": [
+            {
+              "good": "bot",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 36.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Assembles bots (~36h each). Height and recipe _uncertain."
+    },
+    {
+      "id": "SmallPile.Folktails",
+      "display_name": "Small Pile",
+      "category": "storage",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Open pile: 20 cap of a raw good (logs etc.); ground only. Height _uncertain."
+    },
+    {
+      "id": "LargePile.Folktails",
+      "display_name": "Large Pile",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 6
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Open pile: 180 cap of raw goods. Height _uncertain."
+    },
+    {
+      "id": "UndergroundPile.Folktails",
+      "display_name": "Underground Pile",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 20
+        },
+        {
+          "good": "plank",
+          "amount": 40
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "1000 cap; needs >=2 solid terrain layers below; top stays buildable. Geometry _uncertain."
+    },
+    {
+      "id": "SmallWarehouse.Folktails",
+      "display_name": "Small Warehouse",
+      "category": "storage",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 3
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "30 cap, 1 good type; buildable-on."
+    },
+    {
+      "id": "MediumWarehouse.Folktails",
+      "display_name": "Medium Warehouse",
+      "category": "storage",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "200 cap; buildable-on."
+    },
+    {
+      "id": "LargeWarehouse.Folktails",
+      "display_name": "Large Warehouse",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 60
+        },
+        {
+          "good": "plank",
+          "amount": 80
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "1200 cap; buildable-on."
+    },
+    {
+      "id": "ReservePile",
+      "display_name": "Reserve Pile",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Map-provided pile holding recovered goods (not player-built normally). Not faction-suffixed. Footprint _uncertain."
+    },
+    {
+      "id": "ReserveTank",
+      "display_name": "Reserve Tank",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 3,
+        "_uncertain": true
+      },
+      "build_cost": [],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Map-provided water tank holding recovered water. Not faction-suffixed. Footprint _uncertain."
+    },
+    {
+      "id": "ReserveWarehouse",
+      "display_name": "Reserve Warehouse",
+      "category": "storage",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Map-provided warehouse holding recovered goods. Not faction-suffixed. Footprint _uncertain."
+    },
+    {
+      "id": "Campfire.Folktails",
+      "display_name": "Campfire",
+      "category": "decoration",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Social need, 5 visitors; must be on terrain. Cheapest social; build first."
+    },
+    {
+      "id": "RooftopTerrace.Folktails",
+      "display_name": "Rooftop Terrace",
+      "category": "decoration",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 15
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Social, 8 visitors; MUST be placed on top of another building. Science _uncertain.",
+      "_uncertain_fields": [
+        "science_cost"
+      ]
+    },
+    {
+      "id": "MedicalBed.Folktails",
+      "display_name": "Medical Bed",
+      "category": "housing",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "plank",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 80,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Heals the Injury condition; 1 patient; place near housing."
+    },
+    {
+      "id": "Herbalist.Folktails",
+      "display_name": "Herbalist",
+      "category": "industry",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 10
+        },
+        {
+          "good": "gear",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [
+        {
+          "inputs": [
+            {
+              "good": "dandelion",
+              "amount": 1
+            }
+          ],
+          "outputs": [
+            {
+              "good": "antidote",
+              "amount": 1
+            }
+          ],
+          "cycle_hours": 1.0,
+          "_uncertain": true
+        }
+      ],
+      "prerequisites": [],
+      "notes": "Makes antidotes to cure Contamination. Cost/recipe _uncertain.",
+      "_uncertain_fields": [
+        "build_cost"
+      ]
+    },
+    {
+      "id": "Shower.Folktails",
+      "display_name": "Shower",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 2,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 10
+        },
+        {
+          "good": "plank",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 50,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Wet-fur need, 1 visitor; pipe must be submerged in pure water; consumes no water."
+    },
+    {
+      "id": "Lido.Folktails",
+      "display_name": "Lido",
+      "category": "decoration",
+      "footprint": {
+        "x": 4,
+        "y": 3,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 40
+        },
+        {
+          "good": "plank",
+          "amount": 30
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 250,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Fun + wet fur, 7 visitors; must border water (>=0.2 deep)."
+    },
+    {
+      "id": "MudPit.Folktails",
+      "display_name": "Mud Pit",
+      "category": "decoration",
+      "footprint": {
+        "x": 3,
+        "y": 3,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 60
+        },
+        {
+          "good": "treated_plank",
+          "amount": 40
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1800,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Fun, 8 visitors; consumes dirt. Cost _uncertain.",
+      "_uncertain_fields": [
+        "build_cost"
+      ]
+    },
+    {
+      "id": "TeethGrindstone.Folktails",
+      "display_name": "Teeth Grindstone",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Repairs the Chipped Teeth condition; 1 visitor; fits under Double Platforms. Starter tech."
+    },
+    {
+      "id": "ContemplationSpot.Folktails",
+      "display_name": "Contemplation Spot",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Fun/tranquility wellbeing spot, few visitors. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Agora.Folktails",
+      "display_name": "Agora",
+      "category": "decoration",
+      "footprint": {
+        "x": 5,
+        "y": 5,
+        "z": 4,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 120
+        },
+        {
+          "good": "plank",
+          "amount": 40
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Social, 15 visitors. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Carousel.Folktails",
+      "display_name": "Carousel",
+      "category": "decoration",
+      "footprint": {
+        "x": 6,
+        "y": 5,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 50
+        },
+        {
+          "good": "gear",
+          "amount": 50
+        },
+        {
+          "good": "metal_block",
+          "amount": 40
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 700,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 400
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Fun, 12 visitors; POWERED attraction; entrance +1 up. Size/cost/power _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "power"
+      ]
+    },
+    {
+      "id": "DanceHall.Folktails",
+      "display_name": "Dance Hall",
+      "category": "decoration",
+      "footprint": {
+        "x": 5,
+        "y": 5,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 100
+        },
+        {
+          "good": "treated_plank",
+          "amount": 50
+        },
+        {
+          "good": "metal_block",
+          "amount": 20
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1200,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Best social (+5), 20 visitors. Size/cost _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost"
+      ]
+    },
+    {
+      "id": "Detailer.Folktails",
+      "display_name": "Detailer",
+      "category": "decoration",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 20
+        },
+        {
+          "good": "gear",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 1,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Grooming/beauty wellbeing building (fur detailing). Size/cost/science/need _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost",
+        "worker_slots"
+      ]
+    },
+    {
+      "id": "BeaverStatue.Folktails",
+      "display_name": "Beaver Statue",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 50
+        },
+        {
+          "good": "plank",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Aesthetics decoration, range ~3."
+    },
+    {
+      "id": "FarmerMonument.Folktails",
+      "display_name": "Farmer Monument",
+      "category": "monuments",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 3
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 200
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 1000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Awe, range ~7."
+    },
+    {
+      "id": "BrazierOfBonding.Folktails",
+      "display_name": "Brazier of Bonding",
+      "category": "monuments",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 4
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 400
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 3000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Awe, range ~10."
+    },
+    {
+      "id": "FountainOfJoy.Folktails",
+      "display_name": "Fountain of Joy",
+      "category": "monuments",
+      "footprint": {
+        "x": 5,
+        "y": 5,
+        "z": 4,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 400
+        },
+        {
+          "good": "treated_plank",
+          "amount": 100
+        },
+        {
+          "good": "metal_block",
+          "amount": 300
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 12000,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Wonder-tier Awe; base must be submerged in water. Size _uncertain.",
+      "_uncertain_fields": [
+        "footprint"
+      ]
+    },
+    {
+      "id": "Scarecrow.Folktails",
+      "display_name": "Scarecrow",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "paper",
+          "amount": 10
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 200,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Aesthetics + ~30% nearby crop-growth boost. Boost value _uncertain.",
+      "_uncertain_fields": [
+        "notes"
+      ]
+    },
+    {
+      "id": "Bench.Folktails",
+      "display_name": "Bench",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 6
+        },
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 80,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Social, 2 seats; fits under platforms."
+    },
+    {
+      "id": "Hammock.Folktails",
+      "display_name": "Hammock",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 3
+        },
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 80,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Rest/relax decoration seat. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Hedge.Folktails",
+      "display_name": "Hedge",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 3
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Aesthetics decor."
+    },
+    {
+      "id": "Shrub.Folktails",
+      "display_name": "Shrub",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 0,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Cheap aesthetics decor. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Lantern.Folktails",
+      "display_name": "Lantern",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 2
+        },
+        {
+          "good": "plank",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Aesthetics light decor. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "WoodFence.Folktails",
+      "display_name": "Wood Fence",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 1
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative fence. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Weathervane.Folktails",
+      "display_name": "Weathervane",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 5
+        },
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Aesthetics decoration. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "PoleBanner.Folktails",
+      "display_name": "Pole Banner",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 3,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "paper",
+          "amount": 5
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Tall decorative banner (customizable). Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "SquareBanner.Folktails",
+      "display_name": "Square Banner",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 3
+        },
+        {
+          "good": "paper",
+          "amount": 3
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 150,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Wall/square decorative banner. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "BulletinPole.Folktails",
+      "display_name": "Bulletin Pole",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 2,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "log",
+          "amount": 3
+        },
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative/informational pole. Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Roof1x1.Folktails",
+      "display_name": "Roof 1x1",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative roof piece. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Roof1x2.Folktails",
+      "display_name": "Roof 1x2",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 2,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative roof piece. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Roof2x2.Folktails",
+      "display_name": "Roof 2x2",
+      "category": "decoration",
+      "footprint": {
+        "x": 2,
+        "y": 2,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative roof piece. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Roof2x3.Folktails",
+      "display_name": "Roof 2x3",
+      "category": "decoration",
+      "footprint": {
+        "x": 2,
+        "y": 3,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative roof piece. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Roof3x2.Folktails",
+      "display_name": "Roof 3x2",
+      "category": "decoration",
+      "footprint": {
+        "x": 3,
+        "y": 2,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 100,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Decorative roof piece. Cost/science _uncertain.",
+      "_uncertain_fields": [
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "FireworkLauncher.Folktails",
+      "display_name": "Firework Launcher",
+      "category": "decoration",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 300,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Logic-triggerable firework display (celebration). Size/cost/science _uncertain.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Lever.Folktails",
+      "display_name": "Lever",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Manual on/off signal input. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "HttpLever.Folktails",
+      "display_name": "HTTP Lever",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Lever whose state is settable via the game's HTTP API (external control). Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "HttpAdapter.Folktails",
+      "display_name": "HTTP Adapter",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Bridges logic signals to/from the external HTTP API. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Gate.Folktails",
+      "display_name": "Logic Gate",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Configurable boolean gate (AND/OR/NOT/etc.) combining input signals. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Relay.Folktails",
+      "display_name": "Relay",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Repeats/forwards a logic signal to extend a circuit. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Memory.Folktails",
+      "display_name": "Memory",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Latch/flip-flop: stores a boolean state (set/reset). Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Timer.Folktails",
+      "display_name": "Timer",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Emits a signal on a configurable time interval. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Chronometer.Folktails",
+      "display_name": "Chronometer",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on time of day / game clock. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Indicator.Folktails",
+      "display_name": "Indicator",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Visual lamp that lights per input signal. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Speaker.Folktails",
+      "display_name": "Speaker",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Plays a sound when its input signal is active. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "PowerMeter.Folktails",
+      "display_name": "Power Meter",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on power-network load/availability. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "PopulationCounter.Folktails",
+      "display_name": "Population Counter",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a numeric signal of district population (threshold-configurable). Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "ResourceCounter.Folktails",
+      "display_name": "Resource Counter",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on a stored good's quantity vs a threshold. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "ScienceCounter.Folktails",
+      "display_name": "Science Counter",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on accumulated science points. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "WeatherStation.Folktails",
+      "display_name": "Weather Station",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs signals for weather phase (temperate/drought/badtide) and forecasts. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "ContaminationSensor.Folktails",
+      "display_name": "Contamination Sensor",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on nearby water contamination %. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "DepthSensor.Folktails",
+      "display_name": "Depth Sensor",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on local water depth. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "FlowSensor.Folktails",
+      "display_name": "Flow Sensor",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Outputs a signal based on local water flow/current. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "StreamGauge.Folktails",
+      "display_name": "Stream Gauge",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Measures water level/flow at a stream and emits a signal. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    },
+    {
+      "id": "Detonator.Folktails",
+      "display_name": "Detonator",
+      "category": "logic",
+      "footprint": {
+        "x": 1,
+        "y": 1,
+        "z": 1,
+        "_uncertain": true
+      },
+      "build_cost": [
+        {
+          "good": "plank",
+          "amount": 5
+        },
+        {
+          "good": "gear",
+          "amount": 2
+        }
+      ],
+      "worker_slots": 0,
+      "science_cost": 500,
+      "power": {
+        "produced_hp": 0,
+        "consumed_hp": 0
+      },
+      "production": [],
+      "prerequisites": [],
+      "notes": "Triggers placed Dynamite via a logic signal. Logic-system building (Update 6+ circuits). Emits/consumes a boolean or numeric signal via adjacent logic connections. Stats mostly _uncertain; typically 1x1, cheap (planks/gears/punch cards), moderate science.",
+      "_uncertain_fields": [
+        "footprint",
+        "build_cost",
+        "science_cost"
+      ]
+    }
+  ]
+}

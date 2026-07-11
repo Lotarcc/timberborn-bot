@@ -1,0 +1,209 @@
+{
+  "_meta": {
+    "game": "Timberborn",
+    "version": "v1.0.x (Update 4 era, 2025/2026)",
+    "faction_focus": "Folktails + shared",
+    "source": "timberborn.wiki.gg",
+    "notes": "Production-chain graph. For each good: produced_by = list of {building, inputs:[good ids]} that create it (empty inputs = raw/gathered/grown); consumed_by = buildings that use it as a production input. 'construction' / 'eaten' / 'drunk' / 'research' / 'bots' / 'well-being' denote terminal consumption (build costs, beaver needs, or systems) rather than a factory recipe. Walk produced_by backwards to reach raw resources: Log, Water, Badwater, ScrapMetal, PineResin, and wild/grown foods."
+  },
+  "chains": [
+    {
+      "good": "Log",
+      "produced_by": [{"building": "Lumberjack Flag", "inputs": []}],
+      "consumed_by": ["Lumber Mill", "Paper Mill", "Grill", "Bakery", "Smelter", "construction"]
+    },
+    {
+      "good": "Water",
+      "produced_by": [
+        {"building": "Water Pump", "inputs": []},
+        {"building": "Large Water Pump", "inputs": []}
+      ],
+      "consumed_by": ["Refinery", "drunk"]
+    },
+    {
+      "good": "Badwater",
+      "produced_by": [{"building": "Badwater Pump", "inputs": []}],
+      "consumed_by": ["Explosives Factory"]
+    },
+    {
+      "good": "Dirt",
+      "produced_by": [{"building": "Terrain excavation", "inputs": []}],
+      "consumed_by": ["landscaping"]
+    },
+    {
+      "good": "PineResin",
+      "produced_by": [{"building": "Tapper's Shack", "inputs": []}],
+      "consumed_by": ["Wood Workshop"]
+    },
+    {
+      "good": "ScrapMetal",
+      "produced_by": [
+        {"building": "Scavenger Flag", "inputs": []},
+        {"building": "Mine", "inputs": ["TreatedPlank"]}
+      ],
+      "consumed_by": ["Smelter"]
+    },
+    {
+      "good": "Berries",
+      "produced_by": [{"building": "Gatherer Flag", "inputs": []}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "Chestnuts",
+      "produced_by": [{"building": "Gatherer Flag", "inputs": []}],
+      "consumed_by": ["Grill"]
+    },
+    {
+      "good": "Dandelions",
+      "produced_by": [{"building": "Gatherer Flag", "inputs": []}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "Carrots",
+      "produced_by": [{"building": "Efficient Farmhouse", "inputs": []}],
+      "consumed_by": ["Refinery", "eaten"]
+    },
+    {
+      "good": "Potatoes",
+      "produced_by": [{"building": "Efficient Farmhouse", "inputs": []}],
+      "consumed_by": ["Grill", "Refinery"]
+    },
+    {
+      "good": "Wheat",
+      "produced_by": [{"building": "Efficient Farmhouse", "inputs": []}],
+      "consumed_by": ["Gristmill"]
+    },
+    {
+      "good": "SunflowerSeeds",
+      "produced_by": [{"building": "Efficient Farmhouse", "inputs": []}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "Spadderdock",
+      "produced_by": [{"building": "Aquatic Farmhouse", "inputs": []}],
+      "consumed_by": ["Grill", "Refinery"]
+    },
+    {
+      "good": "CattailRoot",
+      "produced_by": [{"building": "Aquatic Farmhouse", "inputs": []}],
+      "consumed_by": ["Gristmill"]
+    },
+    {
+      "good": "MapleSyrup",
+      "produced_by": [{"building": "Tapper's Shack", "inputs": []}],
+      "consumed_by": ["Bakery", "Refinery"]
+    },
+    {
+      "good": "WheatFlour",
+      "produced_by": [{"building": "Gristmill", "inputs": ["Wheat"]}],
+      "consumed_by": ["Bakery"]
+    },
+    {
+      "good": "CattailFlour",
+      "produced_by": [{"building": "Gristmill", "inputs": ["CattailRoot"]}],
+      "consumed_by": ["Bakery"]
+    },
+    {
+      "good": "GrilledPotatoes",
+      "produced_by": [{"building": "Grill", "inputs": ["Potatoes", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "GrilledChestnuts",
+      "produced_by": [{"building": "Grill", "inputs": ["Chestnuts", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "GrilledSpadderdock",
+      "produced_by": [{"building": "Grill", "inputs": ["Spadderdock", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "Bread",
+      "produced_by": [{"building": "Bakery", "inputs": ["WheatFlour", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "CattailCrackers",
+      "produced_by": [{"building": "Bakery", "inputs": ["CattailFlour", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "MaplePastries",
+      "produced_by": [{"building": "Bakery", "inputs": ["WheatFlour", "MapleSyrup", "Log"]}],
+      "consumed_by": ["eaten"]
+    },
+    {
+      "good": "Plank",
+      "produced_by": [{"building": "Lumber Mill", "inputs": ["Log"]}],
+      "consumed_by": ["Gear Workshop", "Wood Workshop", "Printing Press", "construction"]
+    },
+    {
+      "good": "Gear",
+      "produced_by": [{"building": "Gear Workshop", "inputs": ["Plank"]}],
+      "consumed_by": ["construction"]
+    },
+    {
+      "good": "Paper",
+      "produced_by": [{"building": "Paper Mill", "inputs": ["Log"]}],
+      "consumed_by": ["Printing Press"]
+    },
+    {
+      "good": "Book",
+      "produced_by": [{"building": "Printing Press", "inputs": ["Paper"]}],
+      "consumed_by": ["well-being"]
+    },
+    {
+      "good": "PunchCards",
+      "produced_by": [{"building": "Printing Press", "inputs": ["Paper", "Plank"]}],
+      "consumed_by": ["research", "construction"]
+    },
+    {
+      "good": "MetalBlock",
+      "produced_by": [{"building": "Smelter", "inputs": ["ScrapMetal", "Log"]}],
+      "consumed_by": ["construction"]
+    },
+    {
+      "good": "TreatedPlank",
+      "produced_by": [{"building": "Wood Workshop", "inputs": ["Plank", "PineResin"]}],
+      "consumed_by": ["Mine", "construction"]
+    },
+    {
+      "good": "Extract",
+      "produced_by": [{"building": "unknown", "inputs": []}],
+      "consumed_by": ["Refinery"]
+    },
+    {
+      "good": "Biofuel",
+      "produced_by": [
+        {"building": "Refinery", "inputs": ["Water", "Carrots"]},
+        {"building": "Refinery", "inputs": ["Water", "Potatoes"]},
+        {"building": "Refinery", "inputs": ["Water", "Spadderdock"]}
+      ],
+      "consumed_by": ["bots"]
+    },
+    {
+      "good": "Catalyst",
+      "produced_by": [{"building": "Refinery", "inputs": ["MapleSyrup", "Extract"]}],
+      "consumed_by": ["bots"]
+    },
+    {
+      "good": "Explosives",
+      "produced_by": [{"building": "Explosives Factory", "inputs": ["Badwater"]}],
+      "consumed_by": ["demolition"]
+    },
+    {
+      "good": "Fireworks",
+      "produced_by": [{"building": "Explosives Factory", "inputs": ["Badwater"]}],
+      "consumed_by": ["well-being"]
+    },
+    {
+      "good": "SciencePoints",
+      "produced_by": [
+        {"building": "Inventor", "inputs": []},
+        {"building": "Observatory", "inputs": []}
+      ],
+      "consumed_by": ["research"]
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+{
+  "_meta": {
+    "game": "Timberborn",
+    "version_target": "v1.0.x",
+    "sources": [
+      "https://timberborn.wiki.gg/wiki/Trees",
+      "https://timberborn.wiki.gg/wiki/Crops",
+      "https://timberborn.wiki.gg/wiki/Category:Bushes",
+      "https://timberborn.wiki.gg/wiki/Blueberry_Bush",
+      "https://timberborn.wiki.gg/wiki/Thirst",
+      "https://timberborn.fandom.com/wiki/Gatherer_Flag",
+      "Steam Community food/water planning guides"
+    ],
+    "notes": "Numbers reflect base game values in v1.0.x. Growth times and yields can be sped up by Well-being, Beehives (Folktails crops), and other modifiers; base values are given here. Fields marked _uncertain are best-estimate and should be verified in-game.",
+    "generated": "2026-07-11"
+  },
+
+  "trees": [
+    {
+      "species": "Birch",
+      "faction": "both",
+      "grows_on": "dry land; tolerant, low water/moisture need; fastest starter tree",
+      "growth_time_days": 7,
+      "wood_yield_logs": 1,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack",
+      "food_yield": null,
+      "notes": "Fastest-maturing tree. Best default choice for early/rapid wood since 1 log every 7 days beats Pine's ramp-up when you need volume fast. Low logs-per-tree but high logs-per-day for early game."
+    },
+    {
+      "species": "Pine",
+      "faction": "both",
+      "grows_on": "dry land; low water/moisture need, drought-tolerant",
+      "growth_time_days": 12,
+      "wood_yield_logs": 2,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack",
+      "food_yield": null,
+      "secondary_yield": {"item": "Pine Resin", "rate_per_day": 2, "gathered_by": "Gatherer Flag", "_uncertain": true},
+      "notes": "Common default forester tree. Also yields Pine Resin (a material for advanced recipes) when a Gatherer Flag covers it. 2 logs per tree; good balance of speed and wood."
+    },
+    {
+      "species": "Oak",
+      "faction": "both",
+      "grows_on": "dry land; low water need",
+      "growth_time_days": 30,
+      "wood_yield_logs": 8,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack",
+      "food_yield": null,
+      "notes": "Highest logs-per-tree (8) and best long-run logs-per-day efficiency (~0.27), but very slow to mature. Best for established mid/late-game lumber plantations, not early game."
+    },
+    {
+      "species": "Maple",
+      "faction": "Folktails",
+      "grows_on": "dry land; low water need",
+      "growth_time_days": 28,
+      "wood_yield_logs": 6,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack",
+      "food_yield": {"item": "Maple Syrup", "rate_per_day": 3, "gathered_by": "Gatherer Flag", "is_food": true, "_uncertain": true},
+      "notes": "Folktails-only. Dual purpose: logs when felled, plus Maple Syrup harvested by a Gatherer Flag while it stands (continuous food source without cutting the tree). Slow growth."
+    },
+    {
+      "species": "Chestnut",
+      "faction": "Folktails",
+      "grows_on": "dry land; low water need",
+      "growth_time_days": 23,
+      "wood_yield_logs": 4,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack (for logs); Gatherer Flag (for Chestnuts)",
+      "food_yield": {"item": "Chestnuts", "rate_per_day": 3, "gathered_by": "Gatherer Flag", "is_food": true, "_uncertain": true},
+      "notes": "Folktails-only. Standing trees yield Chestnuts (food) via Gatherer Flag; can also be felled for 4 logs. A renewable food + wood tree. Slower than berries to first food but productive once mature."
+    },
+    {
+      "species": "Mangrove",
+      "faction": "Iron Teeth",
+      "grows_on": "wet/flooded terrain; must be planted in shallow water (waterway tiles)",
+      "growth_time_days": 10,
+      "wood_yield_logs": 2,
+      "planted_by": "Forester",
+      "harvested_by": "Lumberjack (for logs); Gatherer Flag (for fruit)",
+      "food_yield": {"item": "Mangrove Fruit", "rate_per_day": 4, "gathered_by": "Gatherer Flag", "is_food": true, "_uncertain": true},
+      "notes": "Iron Teeth-only. Grows on/over water and yields Mangrove Fruit (food) plus logs. Key to Iron Teeth waterway-based food economy. Relatively fast for a dual-purpose tree."
+    }
+  ],
+
+  "crops": [
+    {
+      "crop": "Carrot",
+      "faction": "Folktails",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 4,
+      "yield": 3,
+      "water_need": "irrigated land (needs soil moisture from water source); not aquatic",
+      "food_or_material": "food",
+      "notes": "Earliest and fastest-growing farmed FOOD. Default first crop for Folktails. Can be eaten raw or cooked. Beehive reduces growth to ~2.8 days."
+    },
+    {
+      "crop": "Potato",
+      "faction": "Folktails",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 6,
+      "yield": 1,
+      "water_need": "irrigated land",
+      "food_or_material": "material (raw); becomes food when grilled",
+      "notes": "Raw Potato is a processing input; Grilled Potato (Grill/Gristmill chain) is high-nutrition food. Beehive ~4.2 days."
+    },
+    {
+      "crop": "Wheat",
+      "faction": "Folktails",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 10,
+      "yield": 3,
+      "water_need": "irrigated land",
+      "food_or_material": "material (processed into Bread)",
+      "notes": "Milled into Flour then baked into Bread (high-nutrition food). Beehive ~7.0 days."
+    },
+    {
+      "crop": "Sunflower",
+      "faction": "Folktails",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 5,
+      "yield": 2,
+      "water_need": "irrigated land",
+      "food_or_material": "material (Sunflower Seeds; pressed for oil/food chain)",
+      "notes": "Yields 2 Sunflower Seeds; input to oil/food production. Beehive ~3.5 days."
+    },
+    {
+      "crop": "Cattail",
+      "faction": "Folktails",
+      "farmhouse": "Aquatic Farmhouse",
+      "growth_time_days": 8,
+      "yield": 3,
+      "water_need": "aquatic; planted in shallow water",
+      "food_or_material": "material (Cattail Roots)",
+      "notes": "Grown on water via Aquatic Farmhouse. Yields Cattail Roots (processing input). Beehive ~5.6 days."
+    },
+    {
+      "crop": "Spadderdock",
+      "faction": "Folktails",
+      "farmhouse": "Aquatic Farmhouse",
+      "growth_time_days": 12,
+      "yield": 3,
+      "water_need": "aquatic; planted in shallow water",
+      "food_or_material": "material",
+      "notes": "Water crop for Folktails aquatic farming. Slow. Beehive ~8.4 days."
+    },
+    {
+      "crop": "Kohlrabi",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 3,
+      "yield": 2,
+      "water_need": "irrigated land",
+      "food_or_material": "food",
+      "notes": "Iron Teeth's fastest-growing farmed FOOD and earliest reliable food crop for that faction. Directly edible."
+    },
+    {
+      "crop": "Cassava",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 5,
+      "yield": 1,
+      "water_need": "irrigated land",
+      "food_or_material": "material (processed into food)",
+      "notes": "Iron Teeth processing crop; feeds into food chains."
+    },
+    {
+      "crop": "Soybean",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 8,
+      "yield": 2,
+      "water_need": "irrigated land",
+      "food_or_material": "material (protein/food processing)",
+      "notes": "Iron Teeth crop; input to food processing."
+    },
+    {
+      "crop": "Canola",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 9,
+      "yield": 3,
+      "water_need": "irrigated land",
+      "food_or_material": "material (Canola Seeds -> oil)",
+      "notes": "Yields 3 Canola Seeds; oil/food chain input."
+    },
+    {
+      "crop": "Corn",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 10,
+      "yield": 2,
+      "water_need": "irrigated land",
+      "food_or_material": "material (processed into food)",
+      "notes": "Iron Teeth staple processing crop."
+    },
+    {
+      "crop": "Eggplant",
+      "faction": "Iron Teeth",
+      "farmhouse": "Farmhouse (crop fields)",
+      "growth_time_days": 12,
+      "yield": 3,
+      "water_need": "irrigated land",
+      "food_or_material": "material (processed into food)",
+      "notes": "Slow Iron Teeth crop; higher yield per harvest."
+    }
+  ],
+
+  "gatherables": [
+    {
+      "name": "Blueberry Bush",
+      "yields_item": "Berries",
+      "yield": 3,
+      "food": true,
+      "planted_by": "Forester (reforester)",
+      "harvested_by": "Gatherer Flag",
+      "growth_time_days": 12,
+      "harvest_period_days": 12,
+      "time_to_first_food_days": 24,
+      "notes": "Wild bushes also spawn naturally on maps at start, so Berries are the EARLIEST food with zero infrastructure (just place a Gatherer Flag over existing wild bushes). Planted bushes are slow: 12 days to mature + 12 days to bear berries. Berries are 'unsatisfying'/low-variety food but keep beavers alive early."
+    },
+    {
+      "name": "Dandelion Bush",
+      "yields_item": "Dandelion",
+      "yield": 1,
+      "food": false,
+      "planted_by": "Forester (reforester)",
+      "harvested_by": "Gatherer Flag",
+      "growth_time_days": 3,
+      "regrow_days": 3,
+      "notes": "NOT food. Dandelions are used only to make Medicine at the Healer. Regrows on its own (~3 days) without replanting after harvest."
+    },
+    {
+      "name": "Coffee Bush",
+      "yields_item": "Coffee Bean",
+      "yield": 1,
+      "food": false,
+      "planted_by": "Forester (reforester)",
+      "harvested_by": "Gatherer Flag",
+      "growth_time_days": 9,
+      "harvest_period_days": 3,
+      "notes": "NOT food. Coffee Beans are a material used for Coffee production (Well-being/stimulant good). ~9 days to mature then ~3 days per harvest.",
+      "_uncertain": true
+    }
+  ],
+
+  "food_economy": {
+    "beaver_food_consumption_per_day": {
+      "value": 2.67,
+      "range": [2.5, 3.0],
+      "_uncertain": true,
+      "notes": "Adult beaver eats ~2.5-3.0 food units/day; ~2.67 average. Higher-nutrition processed foods (Bread, Grilled Potato) sate more per unit, so beavers eat fewer total units on a good diet. Rule of thumb for planning: budget ~3 food/beaver/day raw."
+    },
+    "beaver_water_consumption_per_day": {
+      "value": 2.13,
+      "_uncertain": true,
+      "notes": "Thirst depletes ~70%/day and each Water unit restores ~33%, so ~70/33 = ~2.12 Water/beaver/day. Budget ~2.2 water/beaver/day."
+    },
+    "food_variety_wellbeing_notes": "Well-being (formerly Bonus/mood) scales work speed and movement speed for adults, and improves kit growth speed and adult lifespan. Food VARIETY is a major Well-being contributor: eating several distinct food types raises Well-being. In v1.0 individual foods no longer give per-food stat bonuses; instead hungry beavers pick their next meal based on nutrition needs, and a varied larder maximizes Well-being. Practical target: aim for 3+ distinct foods available as soon as possible (e.g. Berries + Carrots + a cooked food).",
+    "starter_food_options": [
+      {"option": "Wild Berries (Blueberry Bushes) via Gatherer Flag", "why": "Zero build cost; harvest bushes already on the map from day 1. The earliest food available.", "sustainability": "Low-moderate: finite wild bushes; plant more via Forester for renewal but planted bushes are slow (24 days to first berries)."},
+      {"option": "Carrots (Folktails Farmhouse)", "why": "Fastest farmed food at 4-day growth, yield 3; the earliest SUSTAINABLE food you fully control. Only needs a Farmhouse + irrigated field.", "sustainability": "High: renewable, fast cycle, controllable scale. The backbone starter food for Folktails."},
+      {"option": "Kohlrabi (Iron Teeth Farmhouse)", "why": "Iron Teeth equivalent of Carrot: 3-day growth, yield 2, directly edible. Earliest sustainable IT food.", "sustainability": "High: fast and renewable for Iron Teeth."},
+      {"option": "Chestnuts / Maple Syrup / Mangrove Fruit (dual-purpose trees)", "why": "Renewable tree food harvested by Gatherer Flag while trees stand.", "sustainability": "Moderate: slow to establish (23-28 day trees for Folktails; 10-day Mangrove for IT) but very stable once mature; adds food variety for Well-being."}
+    ]
+  }
+}

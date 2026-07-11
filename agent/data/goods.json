@@ -1,0 +1,344 @@
+{
+  "_meta": {
+    "game": "Timberborn",
+    "version": "v1.0.x (Update 4 era, 2025/2026)",
+    "faction_focus": "Folktails + shared",
+    "source": "timberborn.wiki.gg",
+    "notes": "category one of raw|food|material|manufactured|luxury. is_food = beavers can eat it (raw or after cooking; intermediates like Flour are false). is_edible_water = counts as a Water/drink need. storage_building lists the storage type(s) that can hold the good. Numbers flagged _uncertain need in-game confirmation."
+  },
+  "goods": [
+    {
+      "id": "Log",
+      "display_name": "Log",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Base wood resource. Felled from trees by Lumberjacks (designate_cutting). Fuel for Grill/Bakery/Smelter and input to Lumber Mill and Paper Mill."
+    },
+    {
+      "id": "Water",
+      "display_name": "Water",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": true,
+      "storage_building": ["Small Tank", "Medium Tank", "Large Tank"],
+      "notes": "Drinking-need resource. Pumped from clean water sources by Water Pump / Large Water Pump. Also an input to Refinery biofuel recipes."
+    },
+    {
+      "id": "Badwater",
+      "display_name": "Badwater",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Tank", "Medium Tank", "Large Tank"],
+      "notes": "Contaminated water pumped by Badwater Pump. NOT drinkable. Input to Explosives Factory."
+    },
+    {
+      "id": "Dirt",
+      "display_name": "Dirt",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Terrain material dug out for landscaping/dams. Storage count for Dirt does not always match displayed number."
+    },
+    {
+      "id": "PineResin",
+      "display_name": "Pine Resin",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Gathered from Pine trees via Tapper's Shack. Input to Wood Workshop (Treated Plank)."
+    },
+    {
+      "id": "ScrapMetal",
+      "display_name": "Scrap Metal",
+      "category": "raw",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Scavenged from surface Ruins (Scavenger Flag) or produced by Mine from underground ruins. Input to Smelter."
+    },
+    {
+      "id": "Berries",
+      "display_name": "Berries",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Gathered from Blueberry bushes via Gatherer Flag. Eaten raw. Cheapest/earliest food; satisfies hunger with little/no well-being bonus. BOOTSTRAP FOOD."
+    },
+    {
+      "id": "Chestnuts",
+      "display_name": "Chestnuts",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Gathered from Chestnut trees via Gatherer Flag. Needs cooking at Grill -> Grilled Chestnuts."
+    },
+    {
+      "id": "Dandelions",
+      "display_name": "Dandelions",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Gathered via Gatherer Flag. Eaten raw."
+    },
+    {
+      "id": "Carrots",
+      "display_name": "Carrots",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails land crop (Efficient Farmhouse). Eaten raw. Fast grower; good early staple. Also a Refinery biofuel input."
+    },
+    {
+      "id": "Potatoes",
+      "display_name": "Potatoes",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails land crop (Efficient Farmhouse). NOT eaten raw; cooked at Grill -> Grilled Potatoes. Also a Refinery biofuel input."
+    },
+    {
+      "id": "Wheat",
+      "display_name": "Wheat",
+      "category": "food",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails land crop (Efficient Farmhouse). Not directly edible; ground to Wheat Flour at Gristmill, then baked to Bread."
+    },
+    {
+      "id": "SunflowerSeeds",
+      "display_name": "Sunflower Seeds",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails land crop (Efficient Farmhouse, Sunflower). Eaten raw; fills its own nutrition category for diet variety."
+    },
+    {
+      "id": "Spadderdock",
+      "display_name": "Spadderdock",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails water crop (Aquatic Farmhouse). Cooked at Grill -> Grilled Spadderdock. Also a Refinery biofuel input."
+    },
+    {
+      "id": "CattailRoot",
+      "display_name": "Cattail Root",
+      "category": "food",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Folktails water crop (Aquatic Farmhouse). Not directly edible; ground to Cattail Flour at Gristmill, then baked to Cattail Crackers."
+    },
+    {
+      "id": "MapleSyrup",
+      "display_name": "Maple Syrup",
+      "category": "food",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Tapped from Maple trees (Folktails). Ingredient for Maple Pastries (Bakery) and Catalyst (Refinery). Not eaten directly."
+    },
+    {
+      "id": "WheatFlour",
+      "display_name": "Wheat Flour",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Intermediate. Gristmill grinds Wheat -> Wheat Flour. Baked into Bread or Maple Pastries."
+    },
+    {
+      "id": "CattailFlour",
+      "display_name": "Cattail Flour",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Intermediate. Gristmill grinds Cattail Root -> Cattail Flour. Baked into Cattail Crackers."
+    },
+    {
+      "id": "GrilledPotatoes",
+      "display_name": "Grilled Potatoes",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Cooked food from Grill. Higher well-being than raw food."
+    },
+    {
+      "id": "GrilledChestnuts",
+      "display_name": "Grilled Chestnuts",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Cooked food from Grill."
+    },
+    {
+      "id": "GrilledSpadderdock",
+      "display_name": "Grilled Spadderdock",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Cooked food from Grill."
+    },
+    {
+      "id": "Bread",
+      "display_name": "Bread",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Baked food (Bakery) from Wheat Flour. Good nutrition + well-being; end of the wheat chain."
+    },
+    {
+      "id": "CattailCrackers",
+      "display_name": "Cattail Crackers",
+      "category": "food",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Baked food (Bakery) from Cattail Flour."
+    },
+    {
+      "id": "MaplePastries",
+      "display_name": "Maple Pastries",
+      "category": "luxury",
+      "is_food": true,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Premium Folktails food (Bakery). Highest well-being food; needs Wheat Flour + Maple Syrup."
+    },
+    {
+      "id": "Plank",
+      "display_name": "Plank",
+      "category": "material",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Primary building material. Lumber Mill: Log -> Plank. Input to Gear Workshop, Wood Workshop, Printing Press. BOOTSTRAP MATERIAL."
+    },
+    {
+      "id": "Gear",
+      "display_name": "Gear",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Advanced building component. Gear Workshop: Plank -> Gear."
+    },
+    {
+      "id": "Paper",
+      "display_name": "Paper",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Paper Mill (Folktails): Log -> Paper. Input to Printing Press."
+    },
+    {
+      "id": "Book",
+      "display_name": "Book",
+      "category": "luxury",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Well-being/education good. Printing Press: Paper -> Book."
+    },
+    {
+      "id": "PunchCards",
+      "display_name": "Punch Cards",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Printing Press: Paper + Plank -> Punch Cards. Used for science/automation."
+    },
+    {
+      "id": "MetalBlock",
+      "display_name": "Metal Block",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Smelter: Scrap Metal (+Log fuel) -> Metal Block. High-tier construction material."
+    },
+    {
+      "id": "TreatedPlank",
+      "display_name": "Treated Plank",
+      "category": "material",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Pile", "Large Pile", "Underground Pile"],
+      "notes": "Wood Workshop: Plank + Pine Resin -> Treated Plank. Durable material; also consumed by Mine."
+    },
+    {
+      "id": "Extract",
+      "display_name": "Extract",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Tank", "Medium Tank", "Large Tank"],
+      "notes": "Liquid intermediate (Folktails bot/refinery chain). Input to Refinery Catalyst recipe. _uncertain source building."
+    },
+    {
+      "id": "Biofuel",
+      "display_name": "Biofuel",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Tank", "Medium Tank", "Large Tank"],
+      "notes": "Refinery: Water + crop -> Biofuel. Powers bots (Folktails golems/automation)."
+    },
+    {
+      "id": "Catalyst",
+      "display_name": "Catalyst",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Refinery: Maple Syrup + Extract -> Catalyst. Bot/advanced production input. _uncertain storage type."
+    },
+    {
+      "id": "Explosives",
+      "display_name": "Explosives",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Explosives Factory: Badwater -> Explosives. Used by Dynamite/terrain demolition."
+    },
+    {
+      "id": "Fireworks",
+      "display_name": "Fireworks",
+      "category": "luxury",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": ["Small Warehouse", "Medium Warehouse", "Large Warehouse"],
+      "notes": "Explosives Factory: Badwater -> Fireworks. Well-being decoration good. _uncertain yield."
+    },
+    {
+      "id": "SciencePoints",
+      "display_name": "Science Points",
+      "category": "manufactured",
+      "is_food": false,
+      "is_edible_water": false,
+      "storage_building": [],
+      "notes": "Abstract research currency, NOT a physical stored good. Generated over time by Inventor / Observatory (Folktails) and some bot buildings. Spent to unlock buildings."
+    }
+  ]
+}

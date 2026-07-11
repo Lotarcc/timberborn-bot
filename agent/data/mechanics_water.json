@@ -1,0 +1,230 @@
+{
+  "_meta": {
+    "title": "Timberborn water / weather / terrain mechanics",
+    "game_version": "1.0.x (Update 6 era)",
+    "purpose": "Numeric knowledge base for the planner/controller to reason about drought survival, water storage sizing, irrigation, and contamination.",
+    "sources": [
+      "https://timberborn.wiki.gg/wiki/Weather",
+      "https://timberborn.wiki.gg/wiki/Water_Pump",
+      "https://timberborn.wiki.gg/wiki/Evaporation",
+      "https://timberborn.wiki.gg/wiki/Irrigation",
+      "https://timberborn.wiki.gg/wiki/Contamination",
+      "https://timberborn.wiki.gg/wiki/Badwater",
+      "https://timberborn.wiki.gg/wiki/Levee",
+      "https://gamerblurb.com/articles/timberborn-cycles-guide-seasons-droughts-and-badtides",
+      "https://timberborn.fandom.com/wiki/Large_Water_Tank"
+    ],
+    "notes": "Numbers marked with a sibling _uncertain:true are inferred from community guides or vary by patch. In-game a 'day' is 24h; a worker shift is ~16h, so per-day production is per-shift, not per-24h.",
+    "units": {
+      "water": "m^3 (1 tile x 1 tile x 1.0 depth == 1 water unit)",
+      "day": "one in-game day; 16h work shift + rest",
+      "depth_height": "1.0 == one full block of water/terrain height"
+    }
+  },
+
+  "weather_cycle": {
+    "definition": "A cycle = one Temperate season followed by one Hazardous season (Drought for Folktails-visible, or Badtide). Water sources stop emitting (drought) or emit badwater (badtide) during the hazard.",
+    "seasons": ["temperate", "drought", "badtide"],
+    "temperate_length_days": {
+      "easy":   {"min": 16, "max": 19},
+      "normal": {"min": 13, "max": 17},
+      "hard":   {"min": 5,  "max": 8},
+      "_uncertain": true,
+      "_note": "Ranges from community cycle guides; official wiki lists first-event hazard durations but not temperate ranges explicitly."
+    },
+    "first_drought_length_days": {
+      "easy":   {"min": 1, "max": 1},
+      "normal": {"min": 2, "max": 3},
+      "hard":   {"min": 3, "max": 6},
+      "_source": "timberborn.wiki.gg/wiki/Weather (first-event table)"
+    },
+    "first_badtide_length_days": {
+      "easy":   {"min": 1,  "max": 1},
+      "normal": {"min": 1,  "max": 1},
+      "hard":   {"min": 6,  "max": 12},
+      "_source": "timberborn.wiki.gg/wiki/Weather (first-event table)"
+    },
+    "later_drought_length_days_community": {
+      "easy":   {"min": 2,  "max": 4},
+      "normal": {"min": 5,  "max": 9},
+      "hard":   {"min": 15, "max": 30},
+      "_uncertain": true,
+      "_note": "Typical mid/late-game ranges after the handicap has ramped up; from community guides."
+    },
+    "scaling": {
+      "mechanism": "Hazard lengths grow each cycle via a duration handicap that expands from a starting fraction to 100% over an expansion window.",
+      "hard_starting_handicap_pct": 20,
+      "hard_expansion_period_cycles": 15,
+      "hard_handicap_growth_per_cycle_pct": 5,
+      "easy_extra_days_per_cycle": {"min": 0.5, "max": 1, "_uncertain": true},
+      "normal_extra_days_per_cycle": {"min": 1, "max": 2, "_uncertain": true},
+      "hard_extra_days_per_cycle": {"min": 2, "max": 4, "_uncertain": true},
+      "_note": "Hard handicap values from wiki; per-difficulty extra-days are community estimates."
+    },
+    "hazard_type_selection": {
+      "default_badtide_chance_pct": 40,
+      "streak_rules": {
+        "after_5_consecutive_droughts_badtide_chance_pct": 70,
+        "after_7_consecutive_droughts_badtide_chance_pct": 100
+      },
+      "rounding": {
+        "base_chance_below_5pct_is_halved": true,
+        "chance_below_2_5pct_set_to_0": true
+      },
+      "faction_note": "Folktails campaigns default to droughts as the visible hazard; Ironteeth encounter badtides. Both mechanics exist in every map; badtide frequency is governed by the chance above."
+    }
+  },
+
+  "badtide_contamination_timeline": {
+    "ramp_up_start_pct": 50,
+    "ramp_up_to_pct": 100,
+    "ramp_up_duration_hours": 12,
+    "ramp_down_begins_hours_before_end": 12,
+    "ramp_down_end_pct": 50,
+    "on_temperate_return_50pct_drops_to_0_immediately": true,
+    "_source": "timberborn.wiki.gg/wiki/Weather"
+  },
+
+  "water_pump": {
+    "faction": "Folktails (base water pump); Ironteeth analog exists",
+    "workers": 1,
+    "output_per_worker_action_water": {"min": 0.33, "max": 1.0, "_note": "per pumping action; scales with water depth under the intake"},
+    "output_per_day_water": {"value": 48, "_uncertain": true, "_note": "~3 water/hour x 16h shift; ideal deep-water conditions. Lower in shallow water."},
+    "internal_storage_water": 15,
+    "max_pump_depth_blocks": 2,
+    "min_water_depth_to_pump": {"value": 0.3, "_uncertain": true, "_note": "shallow water yields the low end of the per-action range; ~0.15-0.3 minimum"},
+    "footprint": {"x": 2, "y": 3, "height": 2},
+    "cost_logs": 12,
+    "badwater_penalty": "Pumps regular water only; at higher badwater concentration efficiency drops toward zero.",
+    "depth_matters": "Deeper water under the intake -> faster pumping (toward the 1.0/action end). This is why reservoirs are built DEEP, not wide.",
+    "variants": {
+      "large_water_pump": {"_uncertain": true, "_note": "higher throughput multi-worker version unlocked later"},
+      "mechanical_water_pump": {"_uncertain": true, "_note": "power-driven, no worker; throughput scales with power"},
+      "deep_water_pump_ironteeth": {"_uncertain": true, "_note": "Ironteeth deep pump; reaches deeper water"}
+    }
+  },
+
+  "water_consumption": {
+    "beaver_water_per_day": {"value": 2.1, "range": {"min": 2.1, "max": 2.25}, "_note": "~2.1 avg; ~2.25 for a beaver working a full 16h shift"},
+    "one_pump_supports_beavers": {"value": 21, "_uncertain": true, "_note": "48 water/day / ~2.25 = ~21 beavers, ideal conditions"}
+  },
+
+  "water_storage": {
+    "small_water_tank": {"capacity_water": 30, "cost_logs": 20, "_note": "starter tank"},
+    "medium_water_tank": {"capacity_water": 300, "_uncertain": true},
+    "large_water_tank": {
+      "capacity_water": 1200,
+      "cost_planks": 30,
+      "cost_gears": 20,
+      "unlock_science": 120,
+      "supports_beavers_one_day": 143,
+      "_note": "4x medium, 40x small. Some older patches listed 300."
+    },
+    "buffer_rule_of_thumb": {
+      "water_per_beaver_per_drought_day": 2.25,
+      "example": "10 beavers x 2.25 x drought_days = required buffer if pumps produce nothing during the hazard.",
+      "resource_dumps_as_water": {"_uncertain": true, "_note": "Fluid Dumps store/discard water but are not efficient day-buffer storage; tanks are the intended buffer."}
+    }
+  },
+
+  "structures": {
+    "dam": {
+      "footprint_tiles": 1,
+      "blocks_height": 0.5,
+      "behavior": "Weir: holds water up to ~0.5 above its base then overflows across the top. Used to raise river level while letting excess spill.",
+      "_note": "Water flows OVER a dam; it does not fully seal."
+    },
+    "levee": {
+      "footprint_tiles": 1,
+      "blocks_height": 1.0,
+      "behavior": "Solid wall, blocks a full 1.0 of water height per tile. Stackable: 3 high = 3.0 wall. Does NOT let water over the top until overtopped.",
+      "_source": "timberborn.wiki.gg/wiki/Levee"
+    },
+    "floodgate": {
+      "controllable_height_per_segment": 1.0,
+      "sizes": {"single": 1.0, "double": 2.0, "triple": 3.0},
+      "behavior": "Adjustable-height gate; raise/lower to hold or release water. Set target height to control reservoir release during drought."
+    },
+    "sluice": {
+      "behavior": "Automated gate that opens/closes based on water level or contamination threshold; e.g. auto-dump badwater or pass water only below a set depth.",
+      "_uncertain": true
+    },
+    "dynamite": {
+      "behavior": "Removes/lowers terrain blocks to deepen reservoirs or carve channels.",
+      "_uncertain": true,
+      "_note": "Terrain depth for a reservoir is created by removing dirt (dynamite / platform digging), enabling deep narrow storage."
+    }
+  },
+
+  "contamination_badwater": {
+    "spread": {
+      "via": "normal fluid simulation - badwater flows and mixes like water",
+      "terrain_contamination_starts_at_water_contamination_pct": 50,
+      "terrain_contamination_range_grows_with_concentration": true
+    },
+    "kills": {
+      "plants_on_contaminated_ground_survive_days": {"min": 0.2, "max": 0.3},
+      "beavers": {
+        "unwell_threshold_pct": 5,
+        "days_to_full_contamination_after_unwell": 3,
+        "movement_speed_reduction_pct": 70,
+        "refuses_to_work": true,
+        "non_basic_needs_frozen": true,
+        "wellbeing_modifier": {"min": -10, "max": 0},
+        "bots_immune": true
+      }
+    },
+    "cleanup": {
+      "folktails_antidote": {"recovery_pct_per_day": 25, "antidotes_needed": 8, "days_to_recover": 4},
+      "ironteeth_decontamination_pod": {"days_to_recover": 2, "consumes": ["extract", "power"]},
+      "soil_recovery": "Contaminated soil clears once badwater recedes and clean water/rain washes it; timing not officially numeric.",
+      "_uncertain_soil": true
+    },
+    "barriers": {
+      "irrigation_barrier": "Blocks moisture/contamination spread through terrain between tiles; used to protect farmland from badwater seep.",
+      "contamination_barrier": "Prevents contamination crossing; pair with levees/sluices to keep a clean reservoir.",
+      "_uncertain": true
+    }
+  },
+
+  "irrigation": {
+    "moisture_range_tiles_flat": {"value": 7, "range": {"min": 6, "max": 8}, "_uncertain": true, "_note": "Horizontal moisture spread from a water/moisture source on flat ground; commonly cited ~6-8 tiles."},
+    "elevation_penalty": "Each +1 block of elevation above the water source reduces irrigation range by ~6 blocks.",
+    "min_water_depth_to_irrigate": 0.15,
+    "pollution_effect": {
+      "irrigates_below_pollution_pct": 50,
+      "max_irrigation_at_pollution_pct": 0,
+      "_note": "Water above 50% pollution does not irrigate and instead contaminates terrain."
+    },
+    "why_crops_need_moisture": "Every tile has a moisture level; crops and trees only grow on moist soil. During drought the water recedes, moisture decays from the edges inward, and unirrigated crops/trees die. Wide-but-shallow water dries fast; deep reservoirs + canals keep soil moist longer.",
+    "channel_tip": "3-wide channels minimize evaporation while maximizing irrigation reach."
+  },
+
+  "evaporation": {
+    "base_rate_per_day": 0.04608,
+    "formula": "water_lost_per_day = 0.04608 * evaporation_value",
+    "evaporation_value_by_adjacency": {
+      "1": 6.4485, "2": 5.3360, "3": 4.3425, "4": 3.4680,
+      "5": 2.7125, "6": 2.0760, "7": 1.5585, "8": 1.1600,
+      "_note": "Higher adjacency (more surrounding water) => lower evaporation multiplier. Exposed narrow water evaporates fastest."
+    },
+    "examples": {
+      "one_wide_channel_level_drop_per_day_m": 0.209,
+      "three_wide_channel_level_drop_per_day_m": 0.063
+    },
+    "roof_does_not_stop_evaporation": true,
+    "implication": "Deep + narrow-surface reservoirs lose the least water per day; this is the core drought-engineering lever.",
+    "_source": "timberborn.wiki.gg/wiki/Evaporation"
+  },
+
+  "drought_survival_planner_hints": {
+    "core_principle": "During drought, sources stop; you live on stored water (tanks) + whatever pumps can still lift from the shrinking reservoir. Reservoir loses ~base_evap/day plus pump draw.",
+    "min_first_drought_buffer_formula": "buffer_water >= beavers * 2.25 * drought_days (fully via tanks if pumps can't reach water)",
+    "recommended_first_drought": {
+      "assumptions": "8-12 beavers, normal difficulty, first drought ~2-3 days",
+      "tanks": "1 Large Water Tank (1200) is overkill for the first drought; 1-2 Small Tanks (30 each) + a filled reservoir usually suffice.",
+      "pumps": "1 Water Pump on water >=2 deep keeps producing through a short drought if the reservoir doesn't drop below its intake.",
+      "reservoir": "Dam/levee the river into a deep pond BEFORE the first drought so pumps stay submerged."
+    }
+  }
+}

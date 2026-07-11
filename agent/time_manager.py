@@ -49,8 +49,10 @@ def is_night(state: dict) -> bool:
         return False
 
 
-def speed_for(state: dict, day_speed: float = 3.0, night_speed: float = 10.0) -> float:
-    """Game speed to run: blast through the (unproductive) night, normal during the day."""
+def speed_for(state: dict, day_speed: float = 6.0, night_speed: float = 12.0) -> float:
+    """Game speed to run: blast through the (unproductive) night, fast during the day too so
+    production actually accumulates while the agent waits (the colony was starving for wood
+    at slow speed). The agent still pauses to decide between advances."""
     return night_speed if is_night(state) else day_speed
 
 
