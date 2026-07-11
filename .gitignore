@@ -55,3 +55,4 @@ agent/metrics.csv
 
 # generated embedding index (rebuild with: python3 agent/kb.py --build-index)
 agent/kb_index.json
+/agent/data/decision_dataset.pristine.json

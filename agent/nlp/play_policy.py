@@ -84,9 +84,15 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
                 if isinstance(b, dict) and b.get("status") == "site")
     at_site_cap = sites >= MAX_ACTIVE_SITES
 
+    advance_conf = 0.0
     for goal_id, conf in ranked:
         if goal_id == "advance_time":
-            return "advance_time", conf, False
+            # advance_time is the LAST resort, not a short-circuit: remember it and keep
+            # walking so an affordable, useful build ranked BELOW it still gets placed
+            # (the model over-weights advance_time from the training imbalance). If nothing
+            # ranked is executable, the loop falls through to the advance_time return below.
+            advance_conf = conf
+            continue
         if at_site_cap and goal_id.startswith("build_"):
             continue  # too many sites pending; skip builds (fall through to advance_time)
         if goal_id == "demolish_unreachable":
@@ -125,7 +131,7 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
                 bridge.act(fu["action"], fu.get("args") or {})
         return resolved_id, conf, True
 
-    return "advance_time", 0.0, False
+    return "advance_time", advance_conf, False
 
 
 def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
@@ -190,6 +196,7 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
             pass
 
         ranked = policy.rank(state)
+        raw_top = ranked[0][0]  # the RAW model pick, before biasing - the true fidelity signal
         # Curriculum biasing: promote the current phase's priority goals to the front of
         # the ranked list (stable sort - within-phase confidence order is preserved).
         ranked = curriculum.bias_ranking(state, ranked)
@@ -205,17 +212,19 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
         goals_by_id = {g.get("id"): g for g in report.get("goals", []) if isinstance(g, dict)}
         expert_goal = goals_by_id.get(expert_top_id)
         expert_top = labeler._to_schema_id(expert_goal, actions_set) if expert_goal else expert_top_id
-        policy_top = ranked[0][0]
+        policy_top = ranked[0][0]  # biased top (what execution starts from)
         total += 1
-        if policy_top == expert_top:
+        # Fidelity = does the MODEL agree with the expert? Compare the RAW model pick, not the
+        # biased top - curriculum biasing is an intentional override, not a model prediction.
+        if raw_top == expert_top:
             agree += 1
 
         intent, conf, executed = _execute_intent(bridge, ranked, report, state, map_data, resources)
 
         play.journal_append(journal_path, {
             "run_id": run_id, "cycle": cycle, "event": "decision",
-            "policy_top": policy_top, "confidence": round(float(conf), 3),
-            "expert_top": expert_top, "agrees": policy_top == expert_top,
+            "raw_top": raw_top, "policy_top": policy_top, "confidence": round(float(conf), 3),
+            "expert_top": expert_top, "agrees": raw_top == expert_top,
             "intent_executed": intent, "executed": executed,
             "pop": _alive(state),
             "logs": planner._logs_available(state),
