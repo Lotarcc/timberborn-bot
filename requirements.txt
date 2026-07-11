@@ -1,0 +1,19 @@
+# Mac agent + local-training environment.
+# Interpreter: Python 3.13 in ./.venv  (matches the Windows GPU box's 3.13).
+# Create/refresh:  python3.13 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+# Run everything via  .venv/bin/python  (the system python3 is 3.14 and has none of this).
+#
+# torch here is the macOS arm64 build with the MPS (Metal) backend, so the M1 Pro can
+# TRAIN and INFER locally (torch.backends.mps.is_available() -> True). The RTX 4060 Ti
+# Windows box (CUDA) remains the heavy-training option; JSON model export keeps inference
+# portable/torch-free if ever needed.
+
+torch==2.13.0            # MPS/Metal build on macOS arm64
+numpy==2.5.1
+scipy==1.18.0
+scikit-learn==1.9.0
+pandas==3.0.3
+networkx==3.6.1          # tech/chain DAG reasoning in agent/economy.py
+pytest==9.1.1
+httpx==0.28.1
+requests==2.34.2
