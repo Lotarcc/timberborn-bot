@@ -117,15 +117,34 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
         cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
         if not cands:
             continue
-        c = cands[0]
         resolved_id = goal.get("id")
-        # auto_connect:false -> the AGENT owns pathing (one DC-rooted trunk via auto_path),
-        # not the bridge's per-building shortest hop.
-        args = {"spec": spec, "x": c.get("x"), "y": c.get("y", c.get("z")), "z": c.get("z"),
-                "auto_connect": False}
-        if c.get("orientation"):
-            args["orientation"] = c["orientation"]
-        bridge.act("place_building", args)
+        # Try each candidate, and if the bridge rejects a tile as invalid it usually returns a
+        # `suggestion.nearest_valid` - retry there once. CRITICAL: only report executed=True when
+        # the bridge actually ACCEPTS (body.ok is True). The old code ignored the response and
+        # returned executed=True on a rejected placement, which froze the loop: it "built" a
+        # phantom lodge every cycle, never advanced time, and never housed anyone.
+        placed = False
+        for c in cands:
+            # auto_connect:false -> the AGENT owns pathing (one DC-rooted trunk via auto_path).
+            attempt = c
+            for _retry in range(2):  # the candidate tile, then the bridge's nearest_valid suggestion
+                args = {"spec": spec, "x": attempt.get("x"), "y": attempt.get("y", attempt.get("z")),
+                        "z": attempt.get("z"), "auto_connect": False}
+                if attempt.get("orientation"):
+                    args["orientation"] = attempt["orientation"]
+                status, body = bridge.act("place_building", args)
+                if status == 200 and isinstance(body, dict) and body.get("ok") is True:
+                    placed = True
+                    break
+                sugg = ((body.get("suggestion") or {}).get("nearest_valid")
+                        if isinstance(body, dict) else None)
+                if not isinstance(sugg, dict):
+                    break
+                attempt = sugg  # retry once at the bridge-suggested valid tile
+            if placed:
+                break
+        if not placed:
+            continue  # no valid tile for this spec right now; fall through to the next ranked intent
         for fu in followups.get(resolved_id, []) or []:
             if isinstance(fu, dict) and fu.get("action"):
                 bridge.act(fu["action"], fu.get("args") or {})
