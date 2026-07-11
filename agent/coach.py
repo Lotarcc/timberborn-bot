@@ -156,13 +156,17 @@ def analyze(journal: metrics_mod.Journal, metrics: dict[str, Any]) -> list[dict[
         )
 
     errors = _errors_by_type(journal)
-    for error_name, count in sorted(errors.items()):
+    if errors:
+        # One deduped lesson for all teaching errors this run (was one-per-error-name,
+        # which proliferated near-identical lessons in the playbook). A STABLE trigger
+        # so reconcile collapses it across runs; the specific errors go in the situation.
+        summary = ", ".join("%s x%d" % (name, count) for name, count in sorted(errors.items()))
         lessons.append(
             _lesson(
-                trigger=f"bridge teaching error == {error_name}",
-                situation=f"{count} failed action(s) in run {run_id}",
-                action="treat the bridge error as a hard constraint; retry with an implemented tool or defer that command until /act supports it",
-                outcome="keeps malformed or unsupported commands from wasting turns",
+                trigger="bridge teaching errors occurred",
+                situation="run %s: %s" % (run_id, summary),
+                action="treat bridge teaching errors as hard constraints; use only implemented tools and planner-provided candidate tiles",
+                outcome="stops malformed or unsupported commands from wasting turns",
                 run_id=run_id,
                 confidence=0.52,
             )
@@ -224,7 +228,29 @@ def _confidence_from_evidence(confidence: float, evidence: dict[str, int]) -> fl
     adjusted = 0.7 * confidence + 0.3 * (0.5 + win_rate * 0.35 - loss_rate * 0.15)
     if runs >= 3:
         adjusted += min(0.08, 0.01 * runs)
-    return round(max(0.05, min(0.95, adjusted)), 3)
+    adjusted = round(max(0.05, min(0.95, adjusted)), 3)
+    # An all-loss lesson (never once helped) is noise or an anti-pattern — never let
+    # it float near the top of the injected playbook. Hard-cap its confidence.
+    if evidence["wins"] == 0 and evidence["losses"] >= 1:
+        adjusted = min(adjusted, 0.2)
+    return adjusted
+
+
+# Keep the injected playbook small and honest.
+MAX_PLAYBOOK_LESSONS = 12
+
+
+def _prune(lessons: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop persistent losers and cap the pool. A lesson seen in >=2 runs that has
+    never once been a 'win' is noise (or a spurious cause->effect) — remove it so it
+    stops polluting the prompt and teaching the model falsehoods."""
+    kept = []
+    for lesson in lessons:
+        ev = _evidence(lesson)
+        if ev["runs"] >= 2 and ev["wins"] == 0:
+            continue  # persistent all-loss => drop
+        kept.append(lesson)
+    return kept[:MAX_PLAYBOOK_LESSONS]
 
 
 def reconcile(existing: list[dict[str, Any]], proposed: list[dict[str, Any]], run_id: str) -> list[dict[str, Any]]:
@@ -277,7 +303,7 @@ def reconcile(existing: list[dict[str, Any]], proposed: list[dict[str, Any]], ru
         ),
         reverse=True,
     )
-    return _assign_ids(reconciled)
+    return _assign_ids(_prune(reconciled))
 
 
 def _assign_ids(lessons: list[dict[str, Any]]) -> list[dict[str, Any]]:
