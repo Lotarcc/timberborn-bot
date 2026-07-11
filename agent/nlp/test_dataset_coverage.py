@@ -42,6 +42,7 @@ class FullEconomyLabelCoverageTests(unittest.TestCase):
             list(dataset._bootstrap_smoke_states())
             + list(dataset._unreachable_states())
             + list(dataset._economy_family_states())
+            + list(dataset._deep_bootstrap_states())
         )
         rows, vocab, labels = dataset.build(synthetic_states=states)
         cls.rows = rows
@@ -110,6 +111,21 @@ class FullEconomyLabelCoverageTests(unittest.TestCase):
             len(overlap), 2,
             "expected >=2 bootstrap goals among the smoke states, got: %r" % overlap,
         )
+
+    def test_deep_bootstrap_goals_covered(self):
+        # Dedicated (not the loose >=2-of-8 test_bootstrap_goals_covered check
+        # above, which can pass vacuously from unrelated bootstrap labels):
+        # build_forester and build_efficient_farm_house are the two goals
+        # dataset._deep_bootstrap_states() exists specifically to reach - see
+        # its docstring. Neither is ever produced by _bootstrap_smoke_states,
+        # _unreachable_states or _economy_family_states (empirically verified:
+        # without _deep_bootstrap_states in the fixture, both are absent from
+        # labels_seen), so without deep-bootstrap states in this fixture these
+        # two labels - including build_forester's live GOAL_DEPENDENCIES
+        # id-collision workaround - have zero Oracle.label regression coverage
+        # anywhere in the suite.
+        self.assertIn("build_forester", self.labels_seen)
+        self.assertIn("build_efficient_farm_house", self.labels_seen)
 
 
 class InjectUnreachableFixTests(unittest.TestCase):
