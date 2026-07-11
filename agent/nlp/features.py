@@ -4,113 +4,38 @@ symbolic feature strings, then a multi-hot vector against a fixed vocab.
 This is the analog of NLP_2.0's PreprocessingLayer (which turned an utterance into
 `POS=`, `lemma=`, `WH=` strings). Here continuous game quantities are bucketized
 into a small closed vocabulary so the same one-hot / CART / tiny-MLP stack transfers
-almost verbatim. Crucially it reuses planner.py's own accessors, so the features the
-policy sees are read the exact same way the expert planner reads them - no drift.
+almost verbatim.
+
+Both the action space and the feature vocabulary are DERIVED from the game database
+(agent/game_schema.py, itself sourced from agent/data/{buildings,goods,...}.json)
+rather than hand-coded here. This keeps the model in sync as buildings/goods/needs
+are added to the database, and guarantees the features the policy sees are read the
+exact same way game_schema (and, through it, planner.py) reads them - no drift.
 """
 
 from __future__ import annotations
 
 from typing import Dict, List, Sequence
 
-from agent import planner
+from agent import game_schema
 
-# The label space = the planner's goal ids. One classification head predicts one of
-# these; execution (WHERE + followups) is handled by planner.candidates_for / followups.
-ACTIONS: List[str] = [
-    "build_lumberjack",
-    "build_water_pump",
-    "build_water_storage",
-    "build_gatherer",
-    "build_farm",
-    "build_lodge",
-    "build_warehouse",
-    "build_inventor",
-    "build_forester",
-    "build_path",
-    "designate_cutting",
-    "designate_planting",
-    "demolish_unreachable",
-    "advance_time",
-]
+# The label space = game_schema's DB-driven action space: build_<snake> for every
+# gameplay building, plus the verb actions (designate_cutting, designate_planting,
+# demolish_unreachable, advance_time). One classification head predicts one of
+# these; execution (WHERE + followups) is handled by planner.candidates_for /
+# followups.
+ACTIONS: List[str] = list(game_schema.actions())
 ACTION_INDEX: Dict[str, int] = {a: i for i, a in enumerate(ACTIONS)}
-
-
-def _bucket(value: float, edges: Sequence[float], names: Sequence[str]) -> str:
-    """Map value into a named bucket. len(names) must be len(edges)+1."""
-    for edge, name in zip(edges, names):
-        if value < edge:
-            return name
-    return names[-1]
-
-
-def _unreachable_present(state: dict) -> bool:
-    buildings = (state.get("buildings") or {}) if isinstance(state, dict) else {}
-    listing = buildings.get("list")
-    if isinstance(listing, list):
-        for b in listing:
-            if isinstance(b, dict) and b.get("status") == "finished" and b.get("reachable") is False:
-                return True
-    return False
 
 
 def feature_strings(state: dict) -> List[str]:
     """The symbolic features for one state. Deterministic and order-independent
-    (the vector is multi-hot, so order does not matter)."""
-    f: List[str] = []
-
-    # --- resources ---------------------------------------------------------
-    logs = planner._logs_available(state)
-    # 12 logs is the pump/inventor gate - make it a bucket boundary.
-    f.append("logs=" + _bucket(logs, (1, 12, 30), ("none", "low", "ok", "high")))
-
-    water_days = planner._resource_days(state, "Water")
-    f.append("water_days=" + _bucket(water_days, (1.5, 3, 10), ("crit", "low", "ok", "high")))
-
-    food_days = planner._resource_days(state, "Food", ("Berries", "Carrot", "Bread"))
-    f.append("food_days=" + _bucket(food_days, (1.5, 3, 10), ("crit", "low", "ok", "high")))
-
-    # --- population --------------------------------------------------------
-    pop = (state.get("population") or {}) if isinstance(state, dict) else {}
-    total = planner._as_int(pop.get("total"), 0)
-    f.append("pop=" + _bucket(total, (6, 15), ("tiny", "small", "large")))
-    homeless = planner._as_int(pop.get("homeless"), 0)
-    f.append("homeless=" + ("yes" if homeless > 0 else "no"))
-
-    # --- what already exists (drives what to build next) -------------------
-    for spec, tag in (
-        ("LumberjackFlag", "lumberjack"),
-        ("WaterPump", "pump"),
-        ("GathererFlag", "gatherer"),
-        ("ForesterFlag", "forester"),
-        ("Inventor", "inventor"),
-        ("Lodge", "lodge"),
-        ("EfficientFarmhouse", "farm"),
-        ("SmallWarehouse", "warehouse"),
-    ):
-        f.append(f"has_{tag}=" + ("yes" if planner._building_count(state, spec) > 0 else "no"))
-
-    f.append("has_food_prod=" + ("yes" if planner._has_food_production(state) else "no"))
-    f.append("has_storage=" + ("yes" if planner._has_storage(state) else "no"))
-
-    # water storage vs the hazard-buffer target
-    units = planner._water_storage_units(state)
-    target = planner._water_storage_target(state)
-    if units <= 0:
-        water_store = "none"
-    elif units < target:
-        water_store = "under"
-    else:
-        water_store = "met"
-    f.append("water_store=" + water_store)
-
-    # --- situational -------------------------------------------------------
-    f.append("building_now=" + ("yes" if planner._sites_under_construction(state) else "no"))
-    f.append("unreachable=" + ("yes" if _unreachable_present(state) else "no"))
-
-    hazard = planner._hazard_buffer_days(state)  # next-weather duration + 2
-    f.append("drought_in=" + _bucket(hazard, (4, 8), ("soon", "mid", "far")))
-
-    return f
+    (the vector is multi-hot, so order does not matter). Delegates to
+    game_schema.feature_strings - the DB-grounded featurizer that covers the whole
+    economy (resources, production capacity, per-category building counts, power
+    balance, well-being) - so this module's vocabulary always matches the DB the
+    action space itself is derived from."""
+    return game_schema.feature_strings(state)
 
 
 class StateFeaturizer:
