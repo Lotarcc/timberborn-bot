@@ -53,6 +53,23 @@ GOAL_DEPENDENCIES = {
 
 DIRECTIONS = ((0, -1, "North"), (1, 0, "East"), (0, 1, "South"), (-1, 0, "West"))
 
+# Keep the tiles around the District Center (town hall) clear for the PATH network —
+# no buildings may sit on the town-hall approaches. Exclude building candidates within
+# this Chebyshev distance of the DC centre (covers the ~3x3 DC footprint + a 1-tile
+# road ring); auto-connect paves paths through the reserved buffer. Paths themselves
+# are exempt.
+TOWNHALL_BUFFER = 2
+
+
+def _blocks_townhall(tile, dc, buffer=TOWNHALL_BUFFER):
+    """True if placing a BUILDING here would sit on/against the town-hall approaches."""
+    if not isinstance(tile, dict) or not isinstance(dc, dict):
+        return False
+    try:
+        return max(abs(int(tile["x"]) - int(dc["x"])), abs(int(tile["y"]) - int(dc["y"]))) <= buffer
+    except (KeyError, TypeError, ValueError):
+        return False
+
 
 def analyze(state, map_data, buildings_detail=None):
     """Return an ordered deterministic goal checklist.
@@ -239,9 +256,17 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
     spec = _goal_spec(goal)
     if str(goal_id).startswith("demolish_unreachable"):
         return []
+    # Buildings (everything except a Path) must stay off the town-hall approaches.
+    keep_townhall_clear = spec != "Path"
+
     resource_candidates = _resource_aware_candidates(
         goal_id, spec, state, map_data, arrays, dc, reachable, resources, k
     )
+    if resource_candidates and keep_townhall_clear:
+        resource_candidates = [c for c in resource_candidates if not _blocks_townhall(c, dc)]
+    # Only short-circuit on resource-aware candidates if any SURVIVED the town-hall
+    # filter; otherwise fall through to the generic scan (which also honors the buffer
+    # but searches the whole map, so it finds valid tiles just outside it).
     if resource_candidates:
         return resource_candidates
 
@@ -256,6 +281,8 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
                 continue
             if tile["occupied"] or tile["contamination"] > 0 or not _is_land(tile):
                 continue
+            if keep_townhall_clear and _blocks_townhall(tile, dc):
+                continue  # reserve the town-hall approaches for paths
 
             candidate = None
             if spec == "WaterPump":

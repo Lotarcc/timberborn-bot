@@ -25,6 +25,24 @@ def set_stock(state, good, amount):
     )
 
 
+def map_with_reserved_townhall_buffer(map_data, state):
+    result = copy.deepcopy(map_data)
+    dc = state["district_center"]
+    origin = result["origin"]
+    origin_y = origin.get("z", origin.get("y", 0))
+    for y in range(
+        dc["y"] - planner.TOWNHALL_BUFFER,
+        dc["y"] + planner.TOWNHALL_BUFFER + 1,
+    ):
+        for x in range(
+            dc["x"] - planner.TOWNHALL_BUFFER,
+            dc["x"] + planner.TOWNHALL_BUFFER + 1,
+        ):
+            index = (y - origin_y) * result["width"] + (x - origin["x"])
+            result["occupied"][index] = 1
+    return result
+
+
 class ScriptedBridge:
     def __init__(self, states, batch_body=None):
         self.states = [copy.deepcopy(state) for state in states]
@@ -64,8 +82,9 @@ class ControllerTests(unittest.TestCase):
         self.resources = load_fixture("resources_fresh.json")
 
     def test_frontier_batches_free_lumberjack_and_other_free_goal(self):
+        map_data = map_with_reserved_townhall_buffer(self.map_data, self.state)
         report = planner.plan_report(
-            self.state, self.map_data, resources=self.resources
+            self.state, map_data, resources=self.resources
         )
 
         frontier = controller.build_safe_ready_frontier(report, self.state)
@@ -125,7 +144,8 @@ class ControllerTests(unittest.TestCase):
     def test_frontier_does_not_oversubscribe_workplaces(self):
         state = copy.deepcopy(self.state)
         state["population"]["unemployed"] = 1
-        report = planner.plan_report(state, self.map_data, resources=self.resources)
+        map_data = map_with_reserved_townhall_buffer(self.map_data, state)
+        report = planner.plan_report(state, map_data, resources=self.resources)
 
         frontier = controller.build_safe_ready_frontier(report, state)
 

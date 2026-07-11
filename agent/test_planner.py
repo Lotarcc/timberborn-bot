@@ -13,6 +13,24 @@ def load_fixture(name):
         return json.load(handle)
 
 
+def map_with_reserved_townhall_buffer(map_data, state):
+    result = json.loads(json.dumps(map_data))
+    dc = state["district_center"]
+    origin = result["origin"]
+    origin_y = origin.get("z", origin.get("y", 0))
+    for y in range(
+        dc["y"] - planner.TOWNHALL_BUFFER,
+        dc["y"] + planner.TOWNHALL_BUFFER + 1,
+    ):
+        for x in range(
+            dc["x"] - planner.TOWNHALL_BUFFER,
+            dc["x"] + planner.TOWNHALL_BUFFER + 1,
+        ):
+            index = (y - origin_y) * result["width"] + (x - origin["x"])
+            result["occupied"][index] = 1
+    return result
+
+
 class PlannerTests(unittest.TestCase):
     def setUp(self):
         self.state = load_fixture("state_fresh.json")
@@ -49,7 +67,7 @@ class PlannerTests(unittest.TestCase):
         candidates = planner.candidates_for("build_water_pump", self.state, self.map_data, k=20)
         coords = {(candidate["x"], candidate["y"]) for candidate in candidates}
 
-        self.assertIn((13, 17), coords)
+        self.assertIn((14, 15), coords)
         self.assertNotIn((25, 8), coords)
         self.assertNotIn((25, 12), coords)
 
@@ -62,13 +80,22 @@ class PlannerTests(unittest.TestCase):
         # Cutting is global, so the flag goes on clear reachable land NEAREST the
         # district center (not in the forest), and the trees are handled by the
         # designate_cutting followup.
-        report = planner.plan_report(self.state, self.map_data, resources=self.resources)
+        map_data = map_with_reserved_townhall_buffer(self.map_data, self.state)
+        report = planner.plan_report(self.state, map_data, resources=self.resources)
         candidates = report["candidates_by_goal"]["build_lumberjack"]
         first = candidates[0]
         dc = self.state["district_center"]
 
         # nearest candidate should be close to the DC, not out at the tree cluster
         self.assertLessEqual(abs(first["x"] - dc["x"]) + abs(first["y"] - dc["y"]), 4)
+        self.assertGreater(
+            max(abs(first["x"] - dc["x"]), abs(first["y"] - dc["y"])),
+            planner.TOWNHALL_BUFFER,
+        )
+        self.assertIn(
+            (first["x"], first["y"]),
+            planner.reachable_tiles(map_data, (dc["x"], dc["y"])),
+        )
         self.assertIn("cuts", first["why"])
         self.assertEqual(
             report["followups"]["build_lumberjack"],
@@ -94,7 +121,8 @@ class PlannerTests(unittest.TestCase):
             if resource["good"] in ("Water", "Food", "Berries"):
                 resource["days_remaining"] = 99
 
-        report = planner.plan_report(state, self.map_data, resources=self.resources)
+        map_data = map_with_reserved_townhall_buffer(self.map_data, state)
+        report = planner.plan_report(state, map_data, resources=self.resources)
 
         self.assertIn("build_forester", [goal["id"] for goal in report["goals"]])
         self.assertIn("build_forester", report["followups"])
