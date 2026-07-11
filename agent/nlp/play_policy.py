@@ -21,7 +21,8 @@ import os
 import time
 from typing import List, Optional, Tuple
 
-from agent import auto_path, controller, planner, play, time_manager
+from agent import auto_path, controller, curriculum, game_schema, planner, play, replay, time_manager
+from agent.nlp import labeler
 from agent.nlp.policy import DecisionPolicy
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,8 +56,25 @@ def _find_unreachable(state) -> Optional[dict]:
 def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
                     state: dict, map_data: dict, resources) -> Tuple[str, float, bool]:
     """Walk ranked intents; execute the first one that is actionable. Returns
-    (intent, confidence, executed)."""
-    goals_by_id = {g.get("id"): g for g in report.get("goals", []) if isinstance(g, dict)}
+    (intent, confidence, executed).
+
+    NAMESPACE BRIDGE: `ranked` carries game_schema ids (agent/nlp/game_schema.py::
+    actions(), e.g. "build_lumberjack_flag", "build_lumber_mill") - that is the
+    model's whole label space. `report["goals"]` (from planner.plan_report) carries
+    a MIXED namespace: legacy bootstrap goals predate game_schema and use
+    planner-only ids ("build_lumberjack", "build_water_pump", "build_gatherer",
+    "build_farm", "build_warehouse", ...), while the Task-3 economy/amenity/power/
+    storage goals already use game_schema ids (planner builds them FROM
+    game_schema.spec_to_action). Keying goals by id (as this used to) means every
+    bootstrap intent the model proposes finds nothing and silently falls through to
+    advance_time - the colony never bootstraps. Resolving BY SPEC instead
+    (action_to_spec(goal_id) -> spec -> the planner goal whose goal["spec"]
+    matches) bridges both namespaces uniformly, the same way agent/nlp/labeler.py's
+    _to_schema_id resolves the training labels.
+    """
+    goals_by_spec = {
+        g["spec"]: g for g in report.get("goals", []) if isinstance(g, dict) and g.get("spec")
+    }
     followups = report.get("followups", {}) or {}
 
     # Don't pile up buildings the colony can't build yet. If enough sites are already under
@@ -78,18 +96,23 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
             bridge.act("demolish", {"x": target.get("x"), "y": target.get("y"), "z": target.get("z")})
             return "demolish_unreachable", conf, True
 
-        goal = goals_by_id.get(goal_id)
-        if not goal or goal.get("satisfied") is True:
+        spec = game_schema.action_to_spec(goal_id)
+        if spec is None:
+            continue  # not a buildable action (unknown id, or a verb we don't special-case)
+        goal = goals_by_spec.get(spec)
+        if goal is None:
+            continue  # the expert isn't proposing this spec right now; try the next ranked intent
+        if goal.get("satisfied") is True:
             continue
         if goal.get("affordable") is False and goal.get("free") is not True:
             continue
-        spec = goal.get("spec")
-        if not spec:
-            continue
-        cands = planner.candidates_for(goal_id, state, map_data, k=6, resources=resources)
+        # candidates_for takes the resolved GOAL DICT (carries the real spec), not the raw
+        # model id - the raw id is not a key of planner.GOAL_SPECS and would mis-resolve.
+        cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
         if not cands:
             continue
         c = cands[0]
+        resolved_id = goal.get("id")
         # auto_connect:false -> the AGENT owns pathing (one DC-rooted trunk via auto_path),
         # not the bridge's per-building shortest hop.
         args = {"spec": spec, "x": c.get("x"), "y": c.get("y", c.get("z")), "z": c.get("z"),
@@ -97,10 +120,10 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
         if c.get("orientation"):
             args["orientation"] = c["orientation"]
         bridge.act("place_building", args)
-        for fu in followups.get(goal_id, []) or []:
+        for fu in followups.get(resolved_id, []) or []:
             if isinstance(fu, dict) and fu.get("action"):
                 bridge.act(fu["action"], fu.get("args") or {})
-        return goal_id, conf, True
+        return resolved_id, conf, True
 
     return "advance_time", 0.0, False
 
@@ -121,11 +144,24 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
     agree = 0
     total = 0
     last_work_hours = None
+    actions_set = set(game_schema.actions())
     for cycle in range(1, max_cycles + 1):
         try:
             state, map_data, resources, _, _ = controller._read_cycle_inputs(bridge, cycle)
         except RuntimeError as err:
             play.log_stderr("cycle %d: %s" % (cycle, err))
+            break
+
+        # Curriculum stop condition: the colony reached the terminal STABLE goal (pop>=30,
+        # water/food buffers clear the longest forecast drought, nobody homeless). Checked
+        # first - before any ranking/planning work - so a reached goal ends the run cleanly.
+        if curriculum.is_goal_reached(state):
+            phase = curriculum.current_phase(state)
+            play.journal_append(journal_path, {
+                "run_id": run_id, "cycle": cycle, "event": "goal_reached", "phase": phase,
+            })
+            replay.record_step(run_id, cycle, state, "goal_reached", meta={"phase": phase})
+            play.log_stderr("cycle %d: goal reached (STABLE) - stopping" % cycle)
             break
 
         if _alive(state) <= 0 and cycle > 1:
@@ -154,11 +190,21 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
             pass
 
         ranked = policy.rank(state)
+        # Curriculum biasing: promote the current phase's priority goals to the front of
+        # the ranked list (stable sort - within-phase confidence order is preserved).
+        ranked = curriculum.bias_ranking(state, ranked)
         report = planner.plan_report(state, map_data, resources=resources)
 
         # fidelity telemetry: does the learned policy agree with the deterministic expert?
+        # NAMESPACE FIX: build_safe_ready_frontier's goal_ids are planner ids (the same
+        # mixed bootstrap/economy namespace _execute_intent bridges above); translate the
+        # expert's pick to a game_schema id via the same _to_schema_id the training labeler
+        # uses so this compares like-for-like against policy_top (always a game_schema id).
         expert = controller.build_safe_ready_frontier(report, state)
-        expert_top = (expert.get("goal_ids") or ["advance_time"])[0]
+        expert_top_id = (expert.get("goal_ids") or ["advance_time"])[0]
+        goals_by_id = {g.get("id"): g for g in report.get("goals", []) if isinstance(g, dict)}
+        expert_goal = goals_by_id.get(expert_top_id)
+        expert_top = labeler._to_schema_id(expert_goal, actions_set) if expert_goal else expert_top_id
         policy_top = ranked[0][0]
         total += 1
         if policy_top == expert_top:
@@ -174,6 +220,13 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
             "pop": _alive(state),
             "logs": planner._logs_available(state),
             "water_days": round(planner._resource_days(state, "Water"), 1),
+        })
+        replay.record_step(run_id, cycle, state, intent, meta={
+            "phase": curriculum.current_phase(state),
+            "confidence": round(float(conf), 3),
+            "expert_top": expert_top,
+            "policy_top": policy_top,
+            "executed": executed,
         })
         play.log_stderr("cycle %02d | policy=%s(%.2f) expert=%s %s | %s" % (
             cycle, policy_top, conf, expert_top,
