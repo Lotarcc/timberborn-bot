@@ -12,7 +12,7 @@
 
 - **Target game:** Timberborn v1.0.13.1 (build 23107127), faction **Folktails**. Internal `Timberborn.*` types are not a stable API — verify against decompile before use.
 - **Game runs LOCALLY on the Mac** (M1 Pro), process `Timberborn.app/Contents/MacOS/Timberborn`, bridge on `http://127.0.0.1:7744`. DLLs at `~/Library/Application Support/Steam/steamapps/common/Timberborn/Timberborn.app/Contents/Resources/Data/Managed`.
-- **The agent runs on the Mac with NO torch** (Python 3.14 has no torch wheels). All model **inference is pure-Python over exported JSON** (`agent/nlp/model.py`). Training happens on the Windows GPU box and exports JSON.
+- **The Mac has a torch venv now** (`./.venv`, Python 3.13, macOS arm64 torch **with the MPS/Metal backend** — `torch.backends.mps.is_available()` → True), plus numpy/scikit-learn/pandas/networkx/pytest. So the **M1 Pro can train AND infer locally** (fast iteration; no scp-to-Windows per run). The RTX 4060 Ti Windows box stays the heavy-training option. **Run everything via `.venv/bin/python`** — the system `python3` is 3.14 and has none of these deps. Pure-Python JSON inference (`agent/nlp/model.py`) still works and stays valid (keeps the deployed agent torch-optional), but is no longer forced. `requirements.txt` reproduces the venv. **Dependencies are allowed** — use numpy/networkx/pytest/etc. where they make the code clearer.
 - **GPU box:** `ssh cka-win` (192.168.88.72, RTX 4060 Ti 16 GB). torch venv at `C:\Users\semyo\tb_ml`, work dir `C:\Users\semyo\tb_ml_work`. Alias lives in `~/.ssh/cka-lab-config` (Included from `~/.ssh/config`).
 - **Placement decides WHERE, the model decides WHAT.** Never train the model to output coordinates.
 - **Paths are agent-owned** (`auto_path.py`), placed with `auto_connect:false`; the bridge no longer paves per building in the play loop.
@@ -100,17 +100,23 @@ done
 ```
 `AutoLoader.cs` reads the marker at the main menu (`""`/`recent` → most-recent save, `new` → new game). Decompile with `DOTNET_ROOT=... ~/.dotnet/tools/ilspycmd -t <FullTypeName> "$MG/Timberborn.<Asm>.dll"`.
 
-### Train on the GPU box
+### Train — LOCAL on the Mac (preferred for iteration) or on the GPU box
+Local (M1 Pro MPS, no network round-trip):
+```bash
+.venv/bin/python -m agent.nlp.train_cart      # sklearn CART -> JSON
+.venv/bin/python -m agent.nlp.train_lidsnet   # torch MLP (device='mps') -> JSON export
+```
+Heavy runs on the RTX 4060 Ti box (still available):
 ```bash
 scp agent/data/decision_dataset.json agent/data/decision_vocab.json agent/data/decision_labels.json cka-win:C:/Users/semyo/tb_ml_work/data/
 ssh cka-win "C:\Users\semyo\tb_ml\Scripts\python.exe C:\Users\semyo\tb_ml_work\nlp\train_cart.py & C:\Users\semyo\tb_ml\Scripts\python.exe C:\Users\semyo\tb_ml_work\nlp\train_lidsnet.py"
 scp cka-win:C:/Users/semyo/tb_ml_work/data/decision_cart.json cka-win:C:/Users/semyo/tb_ml_work/data/decision_mlp.json agent/data/
 ```
-(Sync `agent/nlp/train_*.py` to `tb_ml_work/nlp/` too if they changed. Trainers read `../data/decision_*.json` relative to their own path.)
+(GPU-box path: sync `agent/nlp/train_*.py` to `tb_ml_work/nlp/` if changed. `train_lidsnet.py` should select `mps` on Mac / `cuda` on Windows / `cpu` fallback. Trainers read `../data/decision_*.json` relative to their own path.)
 
 ### Run the agent
 ```bash
-python3 -m agent.nlp.play_policy --cycles 30 --run-id <name>   # journal → agent/journal/<name>.jsonl
+.venv/bin/python -m agent.nlp.play_policy --cycles 30 --run-id <name>   # journal → agent/journal/<name>.jsonl
 ```
 
 ### Gotchas learned the hard way
