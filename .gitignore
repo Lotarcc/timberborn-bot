@@ -34,6 +34,10 @@ dist/
 # Models & large binaries
 *.gguf
 *.onnx
+*.pt
+# Regenerable ML training artifact (Task 5 rebuilds it every retrain; keep history lean).
+# The small portable runtime models (decision_mlp.json/cart.json/labels/vocab) stay tracked.
+/agent/data/decision_dataset.json
 
 # Timberborn saves (force-add specific test checkpoints with `git add -f`)
 *.timber
