@@ -21,7 +21,7 @@ import os
 import time
 from typing import List, Optional, Tuple
 
-from agent import auto_path, controller, planner, play
+from agent import auto_path, controller, planner, play, time_manager
 from agent.nlp.policy import DecisionPolicy
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +120,7 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
 
     agree = 0
     total = 0
+    last_work_hours = None
     for cycle in range(1, max_cycles + 1):
         try:
             state, map_data, resources, _, _ = controller._read_cycle_inputs(bridge, cycle)
@@ -138,6 +139,17 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
         try:
             if planner._building_count(state, "LumberjackFlag") > 0:
                 bridge.act("designate_cutting", {"all": True})
+        except Exception:
+            pass
+
+        # Work-hours strategy: run the work day long early to bootstrap, step it down as the
+        # colony grows so beavers rest. Only push updates when the target changes.
+        try:
+            wh = round(time_manager.work_hours_for(state), 1)
+            if wh != last_work_hours:
+                bridge.act("set_working_hours", {"hours": wh})
+                last_work_hours = wh
+                play.log_stderr("  work hours -> %.0fh (pop %d)" % (wh, _alive(state)))
         except Exception:
             pass
 
@@ -182,7 +194,9 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
                 play.log_stderr("  trunk pathing failed: %s" % exc)
 
         if not executed:
-            controller.bulk_advance_until_wake(bridge, state)
+            # Blast through the night (beavers sleep) and run normal speed by day.
+            controller.bulk_advance_until_wake(
+                bridge, state, run_speed=time_manager.speed_for(state))
 
     summary = {"run_id": run_id, "event": "run_end", "cycles": total,
                "policy_expert_agreement": round(agree / total, 3) if total else None}

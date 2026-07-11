@@ -50,6 +50,7 @@ namespace TimberBridge {
     private readonly ITerrainService _terrain;
     private readonly PlantingService _planting;
     private readonly CameraService _camera;
+    private readonly Timberborn.WorkSystem.WorkingHoursManager _workingHours;
 
     public Actuator(SpeedManager speed,
                     TemplateService templates,
@@ -67,7 +68,8 @@ namespace TimberBridge {
                     IThreadSafeWaterMap waterMap,
                     ITerrainService terrain,
                     PlantingService planting,
-                    CameraService camera) {
+                    CameraService camera,
+                    Timberborn.WorkSystem.WorkingHoursManager workingHours) {
       _speed = speed;
       _templates = templates;
       _blockFactory = blockFactory;
@@ -85,6 +87,7 @@ namespace TimberBridge {
       _terrain = terrain;
       _planting = planting;
       _camera = camera;
+      _workingHours = workingHours;
     }
 
     public string Act(string command, JObject args) {
@@ -111,6 +114,7 @@ namespace TimberBridge {
           case "undesignate_cutting": return DesignateCutting(args, false);
           case "designate_planting": return DesignatePlanting(args);
           case "set_camera": return SetCamera(args);
+          case "set_working_hours": return SetWorkingHours(args);
           case "batch": return Batch(args);
           default: return Err("not_implemented", command);
         }
@@ -124,6 +128,33 @@ namespace TimberBridge {
       if (speed < 0f) speed = 0f;
       _speed.ChangeSpeed(speed);
       return Ok(new { command = "set_speed", speed });
+    }
+
+    // Set the length of the beaver work day. Accepts "hours" (0..24) or "fraction" (0..1)
+    // of the day worked (WorkingHoursManager.WorkedPartOfDay). Longer work day = more
+    // output but less rest/well-being; the agent runs it high to bootstrap, then lowers it
+    // as the colony matures so beavers rest. Guarded — never throws out of Act.
+    private string SetWorkingHours(JObject args) {
+      try {
+        if (_workingHours == null) return Err("unavailable", "WorkingHoursManager not bound");
+        float fraction;
+        if (args != null && args["hours"] != null) {
+          fraction = GetFloat(args, "hours", 16f) / 24f;
+        } else {
+          fraction = GetFloat(args, "fraction", 0.66f);
+        }
+        if (fraction < 0.05f) fraction = 0.05f;
+        if (fraction > 1f) fraction = 1f;
+        _workingHours.WorkedPartOfDay = fraction;
+        return Ok(new {
+          command = "set_working_hours",
+          worked_part_of_day = _workingHours.WorkedPartOfDay,
+          end_hours = _workingHours.EndHours,
+          hours = _workingHours.WorkedPartOfDay * 24f,
+        });
+      } catch (Exception e) {
+        return Err("exception", e.Message);
+      }
     }
 
     private string PlaceBuilding(string specId, int x, int y, int z, string orientation, bool instant, bool autoConnect) {
