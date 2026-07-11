@@ -279,8 +279,15 @@ def badwater_reach_mask(arrays, max_reach=7, step_falloff=5):
     return [budget >= 0 for budget in remaining]
 
 
-def deep_clean_water_edges(arrays, min_depth=1, max_depth=2):
-    """Return land orthogonally adjacent to safe clean water in the depth gate."""
+def deep_clean_water_edges(arrays, min_depth=0.0, max_depth=None):
+    """Return land orthogonally adjacent to safe clean water a pump can draw from.
+
+    A pump is valid on ANY clean water with depth > 0 (the bridge validates the
+    exact intake column, and reaches up to ~2 tiles down, so deeper water is fine
+    too). So the default gate is just depth > min_depth (exclusive of 0) with no
+    hard upper bound; deeper water is *preferred* via scoring, not filtered here.
+    Excludes badwater-reachable water so pumps don't sit where badtide contaminates.
+    """
     grid = _arrays(arrays)
     width, height = grid["width"], grid["height"]
     badwater = badwater_reach_mask(grid)
@@ -300,7 +307,8 @@ def deep_clean_water_edges(arrays, min_depth=1, max_depth=2):
                 other = other_row * width + other_col
                 depth = _number(_value(grid["water"], other, 0))
                 if (
-                    min_depth <= depth <= max_depth
+                    depth > min_depth
+                    and (max_depth is None or depth <= max_depth)
                     and _number(_value(grid["contamination"], other, 0)) <= 0
                     and not badwater[other]
                 ):
