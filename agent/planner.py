@@ -8,6 +8,27 @@ placement candidates so the LLM chooses among valid options instead of guessing.
 from collections import deque
 from itertools import combinations
 
+# Spatial, utility-scored placement (influence/distance/zoning). Optional: the
+# planner still works with the legacy nearest-flat-tile scan if it can't import.
+try:
+    import placement
+except Exception:  # pragma: no cover - import path depends on invocation
+    try:
+        from agent import placement  # type: ignore
+    except Exception:  # pragma: no cover
+        placement = None
+
+
+def _existing_buildings(state):
+    """Placed buildings as [{spec,x,y,z}] for adjacency scoring (from buildings.list)."""
+    out = []
+    blist = (((state or {}).get("buildings") or {}).get("list")) if isinstance(state, dict) else None
+    for b in blist or []:
+        if isinstance(b, dict) and b.get("x") is not None and b.get("y") is not None:
+            out.append({"spec": b.get("spec") or b.get("spec_id"),
+                        "x": b.get("x"), "y": b.get("y"), "z": b.get("z")})
+    return out
+
 
 # Log costs used by the deterministic affordability gate.
 # Path is free for the MVP planner. Verify against the live blueprint dump if
@@ -256,6 +277,24 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
     spec = _goal_spec(goal)
     if str(goal_id).startswith("demolish_unreachable"):
         return []
+
+    # SPATIAL PLACEMENT: for building specs the placement layer supports, use
+    # utility-scored candidates (influence maps + distance fields + the researched
+    # Timberborn weight profiles) instead of "nearest reachable flat tile". Falls
+    # through to the legacy scan for Path / unsupported specs or on any error.
+    if placement is not None and spec in getattr(placement, "PROFILES", {}) and spec != "Path":
+        try:
+            dc_xy = (dc["x"], dc["y"])
+            occupied_extra = _existing_buildings(state)
+            ranked = placement.ranked_candidates(
+                spec, map_data, resources or {}, dc_xy, k=max(_as_int(k, 6), 0),
+                occupied_extra=occupied_extra,
+            )
+            if ranked:
+                return ranked
+        except Exception:
+            pass  # fall through to the legacy candidate scan
+
     # Buildings (everything except a Path) must stay off the town-hall approaches.
     keep_townhall_clear = spec != "Path"
 
