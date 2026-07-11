@@ -442,5 +442,176 @@ class WellbeingEmissionTests(unittest.TestCase):
                         self.assertIn(g["id"], actions)
 
 
+class PowerDeficitTests(unittest.TestCase):
+    """3d helper: net power demand of the BUILT colony (consumed - produced)."""
+
+    def _state(self, counts):
+        return {
+            "buildings": {"counts": dict(counts)},
+            "resources": [{"good": "SciencePoints", "stored": 0}],
+            "population": {"total": 10, "homeless": 0},
+        }
+
+    def test_no_buildings_zero_deficit(self):
+        self.assertEqual(economy.power_deficit(self._state({})), 0)
+
+    def test_empty_state_is_safe(self):
+        self.assertEqual(economy.power_deficit({}), 0)
+
+    def test_built_consumer_without_producer_is_positive(self):
+        # LumberMill draws 50hp; nothing produces power -> deficit 50 (under-powered).
+        self.assertEqual(economy.power_deficit(self._state({"LumberMill.Folktails": 1})), 50)
+
+    def test_producer_covers_consumer_is_negative_surplus(self):
+        # LumberMill(-50) + WaterWheel(+270) -> 50 - 270 = -220 (surplus, signed).
+        d = economy.power_deficit(
+            self._state({"LumberMill.Folktails": 1, "WaterWheel.Folktails": 1})
+        )
+        self.assertEqual(d, -220)
+        self.assertLess(d, 0)
+
+    def test_deficit_scales_with_counts(self):
+        self.assertEqual(economy.power_deficit(self._state({"LumberMill.Folktails": 3})), 150)
+
+    def test_pure_producer_is_negative(self):
+        # A lone PowerWheel (+50) with no consumer is pure surplus.
+        self.assertEqual(economy.power_deficit(self._state({"PowerWheel.Folktails": 1})), -50)
+
+
+class PowerSuggestionTests(unittest.TestCase):
+    """3d helper: the map-blind "power building to add by availability"."""
+
+    def _state(self, science=0, counts=None):
+        return {
+            "buildings": {"counts": dict(counts or {})},
+            "resources": [{"good": "SciencePoints", "stored": science}],
+            "population": {"total": 10, "homeless": 0},
+        }
+
+    def test_fresh_land_only_colony_suggests_power_wheel(self):
+        # sci 0, no map: PowerWheel is the only guaranteed land-placeable producer.
+        self.assertEqual(economy.power_building_suggestion(self._state(science=0)), "PowerWheel")
+
+    def test_empty_state_is_safe(self):
+        self.assertEqual(economy.power_building_suggestion({}), "PowerWheel")
+
+    def test_suggestion_maps_to_a_valid_action(self):
+        actions = set(game_schema.actions())
+        for sci in (0, 120, 400, 1400, 3000):
+            spec = economy.power_building_suggestion(self._state(science=sci))
+            goal_id = game_schema.spec_to_action(spec)
+            self.assertIsNotNone(goal_id, "suggestion %r has no action" % spec)
+            self.assertIn(goal_id, actions)
+
+    def test_suggestion_is_always_unlockable_now(self):
+        for sci in (0, 120, 400, 1400, 3000):
+            state = self._state(science=sci)
+            self.assertIn(
+                economy.power_building_suggestion(state),
+                set(economy.unlockable_now(state)),
+            )
+
+    def test_never_suggests_a_map_gated_producer(self):
+        # WaterWheel (flowing water) + GeothermalEngine (terrain) are placement facts
+        # economy.py can't see, so it never defaults to them.
+        for sci in (0, 160, 1400, 3000):
+            spec = economy.power_building_suggestion(self._state(science=sci))
+            self.assertNotIn(spec, ("WaterWheel", "GeothermalEngine"))
+
+    def test_higher_science_prefers_higher_output_land_producer(self):
+        # "Highest useful output among AVAILABLE options": once unlockable, a wind
+        # producer with more hp than PowerWheel(50) wins.
+        self.assertEqual(
+            economy.power_building_suggestion(self._state(science=120)), "WindTurbine"
+        )  # +68 > +50
+        self.assertEqual(
+            economy.power_building_suggestion(self._state(science=1400)), "LargeWindTurbine"
+        )  # +144 > +68
+
+
+class PowerEmissionTests(unittest.TestCase):
+    """3d wiring: analyze() emits a power goal when built/planned load needs it."""
+
+    POWER_BUILD_IDS = {
+        "build_power_wheel", "build_water_wheel", "build_wind_turbine",
+        "build_large_wind_turbine", "build_geothermal_engine",
+    }
+
+    def _state(self, counts, science=0, logs=100):
+        return {
+            "buildings": {"counts": dict(counts)},
+            "resources": [
+                {"good": "Log", "stored": logs, "all_stock": logs},
+                {"good": "SciencePoints", "stored": science},
+            ],
+            "population": {"total": 10, "homeless": 0},
+        }
+
+    def test_built_underpowered_consumer_emits_power_goal(self):
+        goals = planner.analyze(
+            self._state({"LumberjackFlag.Folktails": 1, "LumberMill.Folktails": 1}), None
+        )
+        ids = [g["id"] for g in goals]
+        self.assertIn("build_power_wheel", ids)
+        goal = next(g for g in goals if g["id"] == "build_power_wheel")
+        self.assertEqual(goal["spec"], "PowerWheel")
+        self.assertEqual(goal["cost_logs"], 20)   # sourced from buildings.json
+        self.assertTrue(goal["affordable"])        # have 100 logs
+
+    def test_planned_powered_producer_pulls_power_with_it(self):
+        # Fresh-ish colony: 3a plans build_lumber_mill (a -50hp consumer). No power
+        # exists, so power is emitted WITH it (anticipatory), not a cycle late.
+        goals = planner.analyze(self._state({"LumberjackFlag.Folktails": 1}), None)
+        ids = [g["id"] for g in goals]
+        self.assertIn("build_lumber_mill", ids)    # the powered consumer being planned
+        self.assertIn("build_power_wheel", ids)    # power lands alongside it
+
+    def test_well_powered_state_emits_no_power_goal(self):
+        # LumberMill(-50) already covered by WaterWheel(+270); no new consumer planned
+        # (LumberMill built, sci 0) -> surplus, so no power goal at all.
+        goals = planner.analyze(
+            self._state({
+                "LumberjackFlag.Folktails": 1,
+                "LumberMill.Folktails": 1,
+                "WaterWheel.Folktails": 1,
+            }),
+            None,
+        )
+        ids = [g["id"] for g in goals]
+        for pid in self.POWER_BUILD_IDS:
+            self.assertNotIn(pid, ids)
+
+    def test_science_locked_power_option_not_emitted_before_unlockable(self):
+        # At 0 science the emitted power goal is the sci-0 PowerWheel, never a
+        # science-locked producer (WindTurbine 120 / LargeWindTurbine 1400).
+        goals = planner.analyze(
+            self._state({"LumberjackFlag.Folktails": 1, "LumberMill.Folktails": 1}, science=0),
+            None,
+        )
+        ids = [g["id"] for g in goals]
+        self.assertIn("build_power_wheel", ids)
+        self.assertNotIn("build_wind_turbine", ids)
+        self.assertNotIn("build_large_wind_turbine", ids)
+
+    def test_every_emitted_power_goal_is_valid_and_unlockable(self):
+        # Regression guard: any emitted power goal id is a real action AND its spec
+        # is unlockable now (never emitted ahead of its tech gate).
+        actions = set(game_schema.actions())
+        counts_variants = (
+            {"LumberjackFlag.Folktails": 1},
+            {"LumberjackFlag.Folktails": 1, "LumberMill.Folktails": 1},
+            {"LumberMill.Folktails": 1, "WaterWheel.Folktails": 1},
+        )
+        for sci in (0, 120, 400, 1400, 3000):
+            for counts in counts_variants:
+                state = self._state(counts, science=sci)
+                goals = planner.analyze(state, None)
+                unlockable = set(economy.unlockable_now(state))
+                for g in goals:
+                    if g["id"] in self.POWER_BUILD_IDS:
+                        self.assertIn(g["id"], actions)
+                        self.assertIn(g["spec"], unlockable)
+
+
 if __name__ == "__main__":
     unittest.main()

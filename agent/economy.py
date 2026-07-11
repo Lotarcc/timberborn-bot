@@ -442,6 +442,113 @@ def uncovered_wellbeing_needs(state: dict) -> List[Dict[str, str]]:
     return [{"need": need, "spec": spec} for _sci, _log, need, spec in ranked]
 
 
+# =============================================================================
+# Power (Task 3d): deficit accounting + a map-blind producer suggestion
+# =============================================================================
+# Power producers economy.py can GUARANTEE are placeable WITHOUT seeing the map.
+# PowerWheel (worker-driven) and the wind turbines (wind-driven) sit on ordinary
+# flat land; WaterWheel needs FLOWING WATER and GeothermalEngine needs a
+# GEOTHERMAL FIELD tile -- placement facts economy.py is blind to. So the
+# suggestion below never DEFAULTS to a map-gated producer; the map-aware placement
+# layer (placement.py / planner.candidates_for) is where WaterWheel's superior
+# 270hp is chosen when flowing water actually exists. GeothermalEngine is also
+# already excluded by unlockable_now (it is _externally_gated on the terrain tile).
+_MAP_GATED_POWER = frozenset({"WaterWheel", "GeothermalEngine"})
+
+
+def _power_stats(spec: str) -> tuple:
+    """(produced_hp, consumed_hp) for ``spec`` from buildings.json ((0.0,0.0) if unknown)."""
+    power = (_building_by_spec().get(_bare(spec)) or {}).get("power") or {}
+    try:
+        produced = float(power.get("produced_hp") or 0)
+    except (TypeError, ValueError):
+        produced = 0.0
+    try:
+        consumed = float(power.get("consumed_hp") or 0)
+    except (TypeError, ValueError):
+        consumed = 0.0
+    return produced, consumed
+
+
+@lru_cache(maxsize=1)
+def _power_producer_specs() -> List[str]:
+    """Bare specs that PRODUCE power (produced_hp>0) and map to a real build action.
+
+    DevPowerGenerator (produced 1000) is excluded automatically: it is in
+    game_schema's _SKIP_IDS so spec_to_action is None. Sorted for determinism.
+    """
+    return sorted(
+        spec
+        for spec in _building_by_spec()
+        if _power_stats(spec)[0] > 0 and game_schema.spec_to_action(spec)
+    )
+
+
+def power_producer_specs() -> List[str]:
+    """Public copy of the power-producer spec list (produced_hp>0, real action)."""
+    return list(_power_producer_specs())
+
+
+def is_power_consumer(spec: str) -> bool:
+    """True if ``spec`` needs power to run (consumed_hp > 0, so it sits idle unfed)."""
+    return _power_stats(spec)[1] > 0
+
+
+def power_deficit(state: dict) -> float:
+    """Net power demand of the BUILT colony: consumed_hp - produced_hp over every
+    built building (counts included).
+
+    Contract (SIGNED, not clamped):
+      * > 0  -> under-powered: built consumers outrun built production (this many
+               hp of consumers sit idle); the emission trigger keys on this.
+      * < 0  -> surplus: spare production capacity exists.
+      * == 0 -> balanced, or no power in play at all.
+    Signed on purpose so a caller can tell "balanced" (0) from "surplus" (<0). A
+    building that BOTH produces and consumes is handled net (its own consumption is
+    part of the consumed sum). Counts include construction sites (game_schema._count),
+    so a just-placed producer immediately relieves the deficit.
+    """
+    state = state if isinstance(state, dict) else {}
+    produced = consumed = 0.0
+    for spec in _building_by_spec():
+        n = game_schema._count(state, spec)
+        if not n:
+            continue
+        p, c = _power_stats(spec)
+        produced += p * n
+        consumed += c * n
+    return consumed - produced
+
+
+def power_building_suggestion(state: dict) -> str:
+    """The power producer to add next, chosen "by availability" and MAP-BLIND.
+
+    Rule: among power producers that are (a) unlockable NOW (science + prereqs, via
+    unlockable_now), (b) mapped to a real build action, and (c) placeable WITHOUT
+    map knowledge (not in _MAP_GATED_POWER), pick the highest produced_hp (spec name
+    breaks ties for determinism). On a fresh land-only colony that is PowerWheel
+    (+50hp, sci 0, worker-driven); as science allows it upgrades to the higher-output
+    wind producers (WindTurbine +68 at 120 SP, LargeWindTurbine +144 at 1400 SP).
+
+    WaterWheel (+270, needs flowing water) and GeothermalEngine (+400, needs a
+    geothermal field) are deliberately NOT the default: economy.py cannot see the map
+    to validate them, so their placement is left to the map-aware layer, which picks
+    WaterWheel when flowing water is actually present. Falls back to PowerWheel
+    (always sci 0 + land-placeable) if the availability scan somehow finds nothing.
+    """
+    state = state if isinstance(state, dict) else {}
+    unlockable = set(unlockable_now(state))
+    options = [
+        spec
+        for spec in _power_producer_specs()
+        if spec in unlockable and spec not in _MAP_GATED_POWER
+    ]
+    if not options:
+        return "PowerWheel"  # guaranteed sci-0, land-placeable default
+    options.sort(key=lambda s: (-_power_stats(s)[0], s))
+    return options[0]
+
+
 __all__ = [
     "needed_producers",
     "producer_plan",
@@ -452,6 +559,10 @@ __all__ = [
     "recommended_order",
     "recommended_index",
     "uncovered_wellbeing_needs",
+    "power_deficit",
+    "power_building_suggestion",
+    "power_producer_specs",
+    "is_power_consumer",
 ]
 
 

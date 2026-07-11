@@ -235,6 +235,7 @@ def analyze(state, map_data, buildings_detail=None):
 
     _append_production_chain_goals(goals, state)
     _append_wellbeing_goals(goals, state)
+    _append_power_goals(goals, state)
 
     if _sites_under_construction(state) and _logs_available(state) > 0 and not _has_urgent_unblocked_goal(goals):
         goals.append(
@@ -466,6 +467,75 @@ def _append_wellbeing_goals(goals, state):
                 cost_logs=economy.log_cost(spec),
             )
         )
+
+
+def _append_power_goals(goals, state):
+    """Append a Task-3d power-building goal when the colony is (or is about to be)
+    under-powered.
+
+    Powered production buildings (LumberMill -50hp, GearWorkshop -120hp, Smelter
+    -200hp, ...) sit IDLE until a power source feeds them, so power must land WITH --
+    not a cycle behind -- production. Two additive triggers, both keyed on the signed
+    economy.power_deficit (consumed - produced over BUILT buildings):
+
+    * REACTIVE: power_deficit > 0 -> a built powered building already outruns built
+      production; add power to actually run it.
+    * ANTICIPATORY: a powered production building is being PLANNED this cycle (an
+      already-emitted goal whose spec is a power consumer) AND there is no existing
+      surplus (power_deficit >= 0) -> emit power alongside the production so the new
+      consumer is not stranded idle for a cycle. An existing surplus (deficit < 0)
+      is left to absorb the new load, so power is not over-built.
+
+    The building is economy.power_building_suggestion (map-blind: PowerWheel by
+    default, upgrading to wind producers as science allows; WaterWheel/Geothermal are
+    left to the map-aware placement layer). It is routed through the SAME
+    unlockable_now science gate as 3a/3b/3c, with cost sourced from buildings.json via
+    economy.log_cost. De-dups against goals already emitted. Emits at most ONE power
+    goal per cycle; multi-building scaling happens across cycles as built counts (and
+    thus the deficit) change.
+    """
+    if economy is None or game_schema is None:
+        return
+
+    deficit = economy.power_deficit(state)
+    planning_powered = any(
+        goal.get("spec") and economy.is_power_consumer(goal["spec"]) for goal in goals
+    )
+    if not (deficit > 0 or (planning_powered and deficit >= 0)):
+        return
+
+    spec = economy.power_building_suggestion(state)
+    if not spec:
+        return
+    goal_id = game_schema.spec_to_action(spec)
+    if not goal_id:
+        return
+    if spec not in set(economy.unlockable_now(state)):
+        return  # science-locked; the suggestion already guarantees this, but be safe
+    covered = {goal.get("id") for goal in goals}
+    if goal_id in covered:
+        return
+
+    if deficit > 0:
+        why = (
+            "built powered buildings draw %d hp beyond production; add %s to run them"
+            % (int(deficit), spec)
+        )
+    else:
+        why = (
+            "a powered production building is being built with no spare power; "
+            "add %s so it runs immediately" % spec
+        )
+
+    goals.append(
+        _goal(
+            goal_id,
+            why,
+            spec=spec,
+            logs_have=_logs_available(state),
+            cost_logs=economy.log_cost(spec),
+        )
+    )
 
 
 def reachable_tiles(map_data, start_xy):
