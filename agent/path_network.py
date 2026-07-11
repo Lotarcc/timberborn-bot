@@ -246,6 +246,9 @@ def plan_network(map_data: dict, dc_road_tiles: list,
     network_xy = set()
     for t in dc_road_tiles:
         network_xy.add(_xy(t))
+    # Pre-existing DC road (never repaved). Access tiles that land here are already
+    # connected; everything else on a route gets paved, access tile included.
+    _dc_road_xy = set(network_xy)
 
     # paths_xy: tiles WE decide to pave (excludes pre-existing DC road).
     paths_xy = set()
@@ -306,16 +309,16 @@ def plan_network(map_data: dict, dc_road_tiles: list,
         # Commit the chosen building's path into the network.
         for tile in best_path:
             txy = _xy(tile)
-            # The building access tile itself is a destination, not pavement
-            # we own; but intermediate tiles become shared road. We add every
-            # tile to the walkable network so future routes can branch here.
+            # Add every tile to the walkable network so future routes branch here.
             network_xy.add(txy)
-            # Only record as "to pave" if it isn't pre-existing DC road.
-            if txy not in {_xy(t) for t in dc_road_tiles}:
-                # Exclude the building access endpoint from paths: it's the
-                # building's own access tile, not a path tile we lay down.
-                if txy != best_bxy:
-                    paths_xy.add(txy)
+            # Pave every tile of the route that isn't pre-existing DC road - INCLUDING
+            # the building's own ACCESS tile. In Timberborn the access tile must ITSELF
+            # be a road tile for the building to be connected/staffed; paving up to but
+            # not including it leaves the building one tile short and unreachable (the
+            # exact bug this fixes). Tiles already on the DC road are the route endpoint
+            # and need no repaving.
+            if txy not in _dc_road_xy:
+                paths_xy.add(txy)
 
         # Drop the committed building from pending.
         for idx, bxy in enumerate(pending):
