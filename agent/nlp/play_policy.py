@@ -256,9 +256,13 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
                 play.log_stderr("  trunk pathing failed: %s" % exc)
 
         if not executed:
-            # Blast through the night (beavers sleep) and run normal speed by day.
+            # Idle fast-forward (COAST): nothing was built this cycle, so run time in a big
+            # chunk at high speed THROUGH minor churn (alert/staffing flicker) to accrue logs
+            # and let beavers breed - instead of stopping every few game-minutes. Crisis wakes
+            # (water/food buffer, hazard, population change) still pause it, so it never coasts
+            # through a thirst/hunger death or into an unprepared drought.
             controller.bulk_advance_until_wake(
-                bridge, state, run_speed=time_manager.speed_for(state))
+                bridge, state, run_speed=12, coast=True, max_advance_days=3.0, max_polls=120)
 
     summary = {"run_id": run_id, "event": "run_end", "cycles": total,
                "policy_expert_agreement": round(agree / total, 3) if total else None}

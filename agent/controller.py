@@ -362,8 +362,15 @@ def _critical_unstaffed(state):
     return result
 
 
-def wake_reason(initial_state, current_state, thresholds=None, hazard_margin_days=DEFAULT_HAZARD_MARGIN_DAYS):
-    if _alert_signature(initial_state) != _alert_signature(current_state):
+def wake_reason(initial_state, current_state, thresholds=None, hazard_margin_days=DEFAULT_HAZARD_MARGIN_DAYS,
+                coast=False):
+    """Why the bulk-advance should pause. When coast=True (idle fast-forward: the play
+    loop has nothing to build and is only waiting for logs/breeding), the minor-churn
+    wakes (alert flicker, staffing shuffles) are SKIPPED so the game covers multiple
+    game-days per cycle instead of stopping every few game-minutes; the crisis wakes
+    (resource/buffer thresholds, weather + hazard, population change) are ALWAYS kept so
+    coasting can never run through a thirst/hunger death or into a drought unprepared."""
+    if not coast and _alert_signature(initial_state) != _alert_signature(current_state):
         return "alerts_changed"
 
     for good, threshold in (thresholds or {}).items():
@@ -397,7 +404,7 @@ def wake_reason(initial_state, current_state, thresholds=None, hazard_margin_day
 
     if _population_signature(initial_state) != _population_signature(current_state):
         return "population_transition"
-    if _critical_unstaffed(initial_state) != _critical_unstaffed(current_state):
+    if not coast and _critical_unstaffed(initial_state) != _critical_unstaffed(current_state):
         return "staffing_transition"
     return None
 
@@ -411,8 +418,16 @@ def bulk_advance_until_wake(
     max_polls=DEFAULT_MAX_POLLS,
     max_advance_days=DEFAULT_MAX_ADVANCE_DAYS,
     hazard_margin_days=DEFAULT_HAZARD_MARGIN_DAYS,
+    coast=False,
 ):
-    """Run time in bulk, pause on a decision threshold, then read stable state."""
+    """Run time in bulk, pause on a decision threshold, then read stable state.
+
+    coast=True is the idle fast-forward: the play loop has nothing to build and is
+    only waiting for logs to accrue / beavers to breed, so we run faster (game speed
+    up to 12) and pass coast through to wake_reason, which then ignores minor churn
+    (alerts/staffing) and only stops for a real crisis or a population change. The
+    hazard-boundary guard below (which uses max_advance_days) still fires first, so a
+    longer coast never advances toward an imminent drought."""
     initial_next_in = _as_float(
         ((((initial_state.get("weather") or {}).get("next") or {}).get("in_days")))
         if isinstance(initial_state, dict)
@@ -431,7 +446,7 @@ def bulk_advance_until_wake(
         }
 
     immediate = wake_reason(
-        initial_state, initial_state, thresholds, hazard_margin_days=hazard_margin_days
+        initial_state, initial_state, thresholds, hazard_margin_days=hazard_margin_days, coast=coast
     )
     if immediate:
         return {"state": initial_state, "reason": immediate, "polls": 0, "paused": True}
@@ -441,7 +456,7 @@ def bulk_advance_until_wake(
     last_state = initial_state
     started = False
     pause_result = None
-    safe_run_speed = min(max(_as_int(run_speed, DEFAULT_RUN_SPEED), 1), DEFAULT_RUN_SPEED)
+    safe_run_speed = min(max(_as_int(run_speed, DEFAULT_RUN_SPEED), 1), 12 if coast else DEFAULT_RUN_SPEED)
     safe_poll_interval = min(max(_as_float(poll_interval, DEFAULT_POLL_INTERVAL), 0.0), 0.25)
     status, body = bridge.act("set_speed", {"speed": safe_run_speed})
     if status != 200 or not isinstance(body, dict) or body.get("ok") is not True:
@@ -461,6 +476,7 @@ def bulk_advance_until_wake(
                 current,
                 thresholds,
                 hazard_margin_days=hazard_margin_days,
+                coast=coast,
             )
             if reason:
                 break
