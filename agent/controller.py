@@ -830,7 +830,13 @@ def run_controller(cfg, run_id, max_cycles, bridge=None, ollama=None):
                         ),
                         flush=True,
                     )
-                elif not llm_required and not pending_forks:
+                else:
+                    # No executable frontier action this cycle. The safe default is
+                    # ALWAYS to advance time — never stall paused. A fork whose chosen
+                    # goal is unaffordable (e.g. WaterPump needs 12 logs, have 0)
+                    # resolves itself once builders/cutters produce; a pending
+                    # unreachable-building fork keeps its alert and is retried. Stalling
+                    # paused would make logs impossible to ever accumulate.
                     thresholds = thresholds_for_report(report, state)
                     advance = bulk_advance_until_wake(
                         bridge,
@@ -861,26 +867,13 @@ def run_controller(cfg, run_id, max_cycles, bridge=None, ollama=None):
                             "after": play.state_summary_for_journal(advance.get("state") or state),
                         },
                     )
+                    reason = advance.get("reason")
+                    if pending_forks:
+                        reason = "%s (fork pending)" % reason
                     print(
-                        "cycle %02d/%d | advance wake=%s polls=%s llm=no"
-                        % (cycle, max_cycles, advance.get("reason"), advance.get("polls")),
-                        flush=True,
-                    )
-                else:
-                    pending_forks = forks_at_start or pending_forks
-                    play.journal_append(
-                        journal_path,
-                        {
-                            "run_id": run_id,
-                            "step": cycle,
-                            "event": "fork_unresolved",
-                            "pending_forks": pending_forks,
-                            "choice": choice,
-                        },
-                    )
-                    print(
-                        "cycle %02d/%d | fork unresolved; game remains paused"
-                        % (cycle, max_cycles),
+                        "cycle %02d/%d | advance wake=%s polls=%s llm=%s"
+                        % (cycle, max_cycles, reason, advance.get("polls"),
+                           "yes" if llm_required else "no"),
                         flush=True,
                     )
                 consecutive_errors = 0
