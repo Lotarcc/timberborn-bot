@@ -25,13 +25,16 @@ def work_hours_for(state: dict) -> float:
     """Desired length of the work day (hours). High to bootstrap, lower as we grow so the
     colony can meet its work in less time and beavers rest."""
     pop = _pop(state)
-    if pop <= 10:
-        return 22.0   # bootstrap: push hard, we have little infrastructure
-    if pop <= 18:
+    # Colonies start at ~13 beavers, so the bootstrap tier must cover them: push the work
+    # day hard while infrastructure is thin, then step down as the colony grows so beavers
+    # rest (better well-being/lifespan).
+    if pop <= 16:
+        return 22.0   # bootstrap: little infrastructure, race to water/food security
+    if pop <= 25:
         return 18.0
-    if pop <= 30:
+    if pop <= 35:
         return 16.0
-    return 14.0       # mature colony: comfortable rest, better well-being/lifespan
+    return 14.0       # mature colony: comfortable rest
 
 
 def is_night(state: dict) -> bool:
