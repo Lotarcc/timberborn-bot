@@ -410,6 +410,10 @@ namespace TimberBridge {
         if (pathSpec == null) {
           return new { connected = false, paths_laid = 0, reason = "no_path_spec" };
         }
+        // Over deep water a flat Path can't be placed; a Platform is the crossing
+        // structure. We keep Path on dry/shallow ground and fall back to Platform only
+        // where Path is invalid AND the tile is water (so nothing dry-land regresses).
+        BlockObjectSpec platformSpec = FindSpec("Platform");
 
         // Resolve the game's actual access tile(s) from the just-created object (ground
         // truth: BuildingAccessible on the real entity). Only fall back to a coord lookup
@@ -465,16 +469,25 @@ namespace TimberBridge {
           if (_reachability.IsTileOnDistrictRoad(tile)) continue; // road end / already road
           if (laid.Count >= MaxPathTiles) break;
           if (HasPathAt(tile)) continue;                 // already a path here (still contiguous)
-          if (!CanPave(pathSpec, tile)) continue;        // re-validate before creating
-          // Lay the connector path as a CONSTRUCTION SITE so it's built by beavers like
-          // everything else (user requirement). Paths are free (0 materials) and beavers
-          // build them outward from the road: the tile adjacent to the road is reachable
-          // by builders first, and each built tile makes the next reachable, so the chain
-          // completes and the building connects. (Reachability is therefore delayed until
-          // the chain is built - the agent must wait, not demolish, while paths are under
-          // construction.)
-          _blockFactory.CreateUnfinished(pathSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
-          laid.Add(new { x = tile.x, y = tile.y, z = tile.z });
+          // Choose the crossing structure per tile: a flat Path on dry/shallow ground, or
+          // a Platform where a Path can't be placed but the tile is water (deep water).
+          BlockObjectSpec paveSpec = pathSpec;
+          if (!CanPave(pathSpec, tile)) {
+            if (platformSpec != null && IsWaterTile(tile)
+                && _validator.BlocksValid(platformSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped))) {
+              paveSpec = platformSpec;
+            } else {
+              continue; // neither Path nor Platform can go here
+            }
+          }
+          // Lay the connector as a CONSTRUCTION SITE so it's built by beavers like
+          // everything else (user requirement). Beavers build outward from the road: the
+          // tile adjacent to the road is reachable by builders first, and each built tile
+          // makes the next reachable, so the chain completes and the building connects.
+          // (Reachability is therefore delayed until the chain is built - the agent must
+          // wait, not demolish, while the crossing is under construction.)
+          _blockFactory.CreateUnfinished(paveSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+          laid.Add(new { x = tile.x, y = tile.y, z = tile.z, spec = paveSpec == platformSpec ? "Platform" : "Path" });
         }
 
         return new { connected = true, paths_laid = laid.Count, path_tiles = laid,
@@ -538,7 +551,7 @@ namespace TimberBridge {
             // Walk a neighbour if we can route through it: it's already on the road,
             // it already carries a path (traverse it, we just won't re-lay), or a fresh
             // Path would validly place there.
-            if (!_reachability.IsTileOnDistrictRoad(n) && !HasPathAt(n) && !CanPave(pathSpec, n)) continue;
+            if (!_reachability.IsTileOnDistrictRoad(n) && !HasPathAt(n) && !CanPave(pathSpec, n) && !CanCrossWater(n)) continue;
             parent[n] = cur;
             queue.Enqueue(n);
           }
@@ -720,6 +733,22 @@ namespace TimberBridge {
 
     // A height ceiling for surface scans; the map's vertical extent never exceeds this.
     private const int TerrainTopZ = 32;
+
+    // Is this tile over water? (deep enough that a flat Path won't validate). Guarded.
+    private bool IsWaterTile(Vector3Int tile) {
+      try { return _waterMap.WaterDepth(tile) > 0f; } catch { return false; }
+    }
+
+    // Can we traverse this water tile with a Platform crossing? Used so the route BFS
+    // may cross deep water (where CanPave(Path) fails) by paving Platforms instead.
+    private bool CanCrossWater(Vector3Int tile) {
+      try {
+        if (!IsWaterTile(tile) || HasPathAt(tile)) return false;
+        BlockObjectSpec platformSpec = FindSpec("Platform");
+        return platformSpec != null
+            && _validator.BlocksValid(platformSpec, new Placement(tile, Orientation.Cw0, FlipMode.Unflipped));
+      } catch { return false; }
+    }
 
     // Can a Path be placed here? Valid per BlockValidator (handles terrain/water/occupancy)
     // and not already occupied by a non-path object we'd clash with.
