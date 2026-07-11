@@ -136,7 +136,7 @@ def analyze(journal: metrics_mod.Journal, metrics: dict[str, Any]) -> list[dict[
             _lesson(
                 trigger="forecast drought OR food_stored == 0",
                 situation=f"cycle<={metrics.get('final_cycle', 0)}, pop={metrics.get('final_population', 0)}, no food bank",
-                action="build GathererFlag immediately, then EfficientFarmhouse with carrots; target stored_food >= (D+2)*2.67*P",
+                action="build GathererFlag immediately, then EfficientFarmHouse with carrots; target stored_food >= (D+2)*2.67*P",
                 outcome="keeps hunger from disabling pump and farm workers during the first hazard",
                 run_id=run_id,
                 confidence=0.56,

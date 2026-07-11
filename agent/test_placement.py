@@ -52,7 +52,7 @@ class PlacementTests(unittest.TestCase):
         )
 
         score, allowed = placement.score_for_spec(
-            "ForesterFlag", arrays, {}, (16, 22)
+            "Forester", arrays, {}, (16, 22)
         )
 
         self.assertTrue(allowed[0])

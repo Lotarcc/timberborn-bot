@@ -73,7 +73,7 @@ ACTION_SCHEMA = {
 # Buildings the VLM may ask for (the placement layer knows where each goes).
 BUILDABLE = [
     "LumberjackFlag", "WaterPump", "SmallTank", "GathererFlag", "Lodge",
-    "EfficientFarmhouse", "SmallWarehouse", "ForesterFlag", "Inventor",
+    "EfficientFarmHouse", "SmallWarehouse", "Forester", "Inventor",
 ]
 
 SYSTEM_PROMPT_FALLBACK = """\
@@ -222,7 +222,7 @@ def execute(bridge, decision, state, map_data, resources, report):
     if action == "build":
         spec = (decision.get("building") or "").strip()
         # normalize a few common names
-        spec = {"Farmhouse": "EfficientFarmhouse", "Forester": "ForesterFlag",
+        spec = {"Farmhouse": "EfficientFarmHouse", "Forester": "Forester",
                 "Tank": "SmallTank", "Warehouse": "SmallWarehouse"}.get(spec, spec)
         if spec not in BUILDABLE:
             # fall back to the planner's top affordable goal spec

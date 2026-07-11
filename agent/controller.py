@@ -348,7 +348,7 @@ def _critical_unstaffed(state):
     buildings = (state.get("buildings", {}) if isinstance(state, dict) else {}) or {}
     explicit = buildings.get("unstaffed") or []
     result = {str(item) for item in explicit}
-    critical_specs = {"WaterPump", "GathererFlag", "EfficientFarmhouse", "Farmhouse"}
+    critical_specs = {"WaterPump", "GathererFlag", "EfficientFarmHouse", "Farmhouse"}
     for building in buildings.get("list", []) or []:
         if not isinstance(building, dict):
             continue

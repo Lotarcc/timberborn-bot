@@ -588,8 +588,8 @@ def infer_next_building_type(state):
 
     if _building_count(state, "GathererFlag") <= 0:
         return "GathererFlag"
-    if _building_count(state, "EfficientFarmhouse") <= 0:
-        return "EfficientFarmhouse"
+    if _building_count(state, "EfficientFarmHouse") <= 0:
+        return "EfficientFarmHouse"
     if _building_count(state, "SmallWarehouse") <= 0:
         return "SmallWarehouse"
     return "Path"
@@ -781,7 +781,7 @@ def compact_map_summary(map_data, state, next_spec):
 
     if next_spec == "WaterPump":
         candidates = clean_edges[:6]
-    elif next_spec == "EfficientFarmhouse":
+    elif next_spec == "EfficientFarmHouse":
         candidates = moist_tiles[:6] or flat_dry[:6]
     elif next_spec == "Path":
         candidates = path_tiles[:6] or flat_dry[:6]

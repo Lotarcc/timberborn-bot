@@ -171,7 +171,7 @@ def forester_plantation(rows=4, cols=4):
     if rows < 1 or cols < 1:
         raise ValueError("rows and cols must be >= 1")
 
-    fw, fh = footprint("ForesterFlag")  # 2 x 2
+    fw, fh = footprint("Forester")  # 2 x 2
     items = []
 
     # Path gap column immediately left of the grid (x = -1), spanning the grid.
@@ -181,7 +181,7 @@ def forester_plantation(rows=4, cols=4):
     # Forester sits left of the path gap: occupies x in [-1-fw, -2].
     forester_dx = -1 - fw
     items.append(
-        _offset("ForesterFlag", forester_dx, 0, role="forester", orientation="E")
+        _offset("Forester", forester_dx, 0, role="forester", orientation="E")
     )
     # Access path on the forester's own far (left) side.
     for j in range(fh):
@@ -268,7 +268,7 @@ def bakery_chain():
     access path row at ``y = -1``.
     """
     chain = [
-        ("EfficientFarmhouse", "farm"),
+        ("EfficientFarmHouse", "farm"),
         ("Gristmill", "mill"),
         ("Bakery", "bakery"),
     ]
@@ -323,8 +323,8 @@ class LayoutMacroTests(unittest.TestCase):
 
     def test_footprints_available(self):
         # Every spec our macros emit must resolve to a footprint.
-        for spec in ("ForesterFlag", "WaterPump", "SmallTank", "Lodge",
-                     "EfficientFarmhouse", "Gristmill", "Bakery", "Path"):
+        for spec in ("Forester", "WaterPump", "SmallTank", "Lodge",
+                     "EfficientFarmHouse", "Gristmill", "Bakery", "Path"):
             w, h = footprint(spec)
             self.assertGreaterEqual(w, 1)
             self.assertGreaterEqual(h, 1)
@@ -335,7 +335,7 @@ class LayoutMacroTests(unittest.TestCase):
     def test_forester_plantation(self):
         items = forester_plantation(rows=4, cols=4)
         self._assert_no_overlap(items)
-        self.assertEqual(building_specs(items), ["ForesterFlag"])
+        self.assertEqual(building_specs(items), ["Forester"])
         # Exactly one planting_area descriptor, sized rows x cols.
         areas = [it for it in items if it["role"] == "planting_area"]
         self.assertEqual(len(areas), 1)
@@ -392,7 +392,7 @@ class LayoutMacroTests(unittest.TestCase):
         self._assert_no_overlap(items)
         self.assertEqual(
             building_specs(items),
-            ["EfficientFarmhouse", "Gristmill", "Bakery"],
+            ["EfficientFarmHouse", "Gristmill", "Bakery"],
         )
         # Chain must be laid out in flow order along +x, edge-to-edge.
         buildings = [it for it in items if it["role"] not in ("path",)]

@@ -112,7 +112,7 @@ class PlannerTests(unittest.TestCase):
                 "WaterPump": 1,
                 "SmallTank": 4,
                 "GathererFlag": 1,
-                "EfficientFarmhouse": 1,
+                "EfficientFarmHouse": 1,
                 "SmallWarehouse": 1,
                 "Inventor": 1,
             }

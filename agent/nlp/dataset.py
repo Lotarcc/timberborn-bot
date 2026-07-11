@@ -79,13 +79,13 @@ _STAGES: List[Dict[str, int]] = [
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4},
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4, "Lodge": 1},
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4, "Lodge": 1,
-     "EfficientFarmhouse": 1},
+     "EfficientFarmHouse": 1},
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4, "Lodge": 1,
-     "EfficientFarmhouse": 1, "SmallWarehouse": 1},
+     "EfficientFarmHouse": 1, "SmallWarehouse": 1},
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4, "Lodge": 1,
-     "EfficientFarmhouse": 1, "SmallWarehouse": 1, "Inventor": 1},
+     "EfficientFarmHouse": 1, "SmallWarehouse": 1, "Inventor": 1},
     {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 5, "Lodge": 2,
-     "EfficientFarmhouse": 1, "SmallWarehouse": 1, "Inventor": 1, "ForesterFlag": 1},
+     "EfficientFarmHouse": 1, "SmallWarehouse": 1, "Inventor": 1, "Forester": 1},
 ]
 
 _LOGS = [0, 6, 12, 20, 40]

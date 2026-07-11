@@ -113,18 +113,23 @@ class OracleSchemaTranslationTests(unittest.TestCase):
         self.assertEqual(label, "build_gatherer_flag")
         self.assertIn(label, self.actions)
 
-    def test_farm_needed_uses_the_alias(self):
+    def test_farm_needed_resolves_via_spec_to_action(self):
         # Gatherer exists but food is running low ->
-        # {"id": "build_farm", "spec": "EfficientFarmhouse"}. The planner's spec has
-        # a lowercase "h" (buildings.json's real spec is "EfficientFarmHouse"), so
-        # game_schema.spec_to_action("EfficientFarmhouse") returns None - this is
-        # the ONE case that must fall through to the hand-coded _ALIAS instead of
-        # resolving via spec.
+        # {"id": "build_farm", "spec": "EfficientFarmHouse"}. planner.GOAL_SPECS
+        # now carries the real buildings.json spelling (capital "H"), so
+        # game_schema.spec_to_action("EfficientFarmHouse") resolves directly to
+        # build_efficient_farm_house - the labeler's _ALIAS fallback (still
+        # covered in isolation by
+        # ToSchemaIdHelperTests.test_alias_used_only_when_spec_is_unresolvable)
+        # is no longer needed for this real, planner-driven scenario.
         state = _make_state(
             counts={"LumberjackFlag": 1, "WaterPump": 1, "GathererFlag": 1},
             log=40, water_stored=100, water_days=20, food_stored=2, food_days=1.0,
         )
-        self.assertIsNone(game_schema.spec_to_action("EfficientFarmhouse"))  # precondition
+        self.assertEqual(
+            game_schema.spec_to_action("EfficientFarmHouse"),
+            "build_efficient_farm_house",
+        )  # precondition
         label = self.oracle.label(state)
         self.assertEqual(label, "build_efficient_farm_house")
         self.assertIn(label, self.actions)
@@ -138,8 +143,8 @@ class OracleSchemaTranslationTests(unittest.TestCase):
         state = _make_state(
             counts={
                 "LumberjackFlag": 1, "WaterPump": 1, "GathererFlag": 1,
-                "SmallTank": 5, "Lodge": 1, "EfficientFarmhouse": 1,
-                "SmallWarehouse": 1, "Inventor": 1, "ForesterFlag": 1,
+                "SmallTank": 5, "Lodge": 1, "EfficientFarmHouse": 1,
+                "SmallWarehouse": 1, "Inventor": 1, "Forester": 1,
             },
             log=200, water_stored=100, water_days=20, food_stored=100, food_days=20,
             science=150, free_beds=5,
@@ -178,14 +183,14 @@ class OracleSchemaTranslationTests(unittest.TestCase):
             {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4,
              "Lodge": 1},
             {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4,
-             "Lodge": 1, "EfficientFarmhouse": 1},
+             "Lodge": 1, "EfficientFarmHouse": 1},
             {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4,
-             "Lodge": 1, "EfficientFarmhouse": 1, "SmallWarehouse": 1},
+             "Lodge": 1, "EfficientFarmHouse": 1, "SmallWarehouse": 1},
             {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 4,
-             "Lodge": 1, "EfficientFarmhouse": 1, "SmallWarehouse": 1, "Inventor": 1},
+             "Lodge": 1, "EfficientFarmHouse": 1, "SmallWarehouse": 1, "Inventor": 1},
             {"LumberjackFlag": 1, "GathererFlag": 1, "WaterPump": 1, "SmallTank": 5,
-             "Lodge": 2, "EfficientFarmhouse": 1, "SmallWarehouse": 1, "Inventor": 1,
-             "ForesterFlag": 1},
+             "Lodge": 2, "EfficientFarmHouse": 1, "SmallWarehouse": 1, "Inventor": 1,
+             "Forester": 1},
         ]
         logs = (0, 6, 20, 200)
         seen_labels = set()
@@ -240,12 +245,29 @@ class ToSchemaIdHelperTests(unittest.TestCase):
             goal = {"id": goal_id}
             self.assertEqual(_to_schema_id(goal, self.actions), goal_id)
 
-    def test_build_forester_falls_through_unresolvable_spec_to_membership(self):
-        # Distinct from the alias case: spec_to_action("ForesterFlag") is also None
-        # (unlike LumberjackFlag/GathererFlag it does NOT resolve), but unlike
-        # "build_farm" the literal id "build_forester" already happens to be a
-        # member of game_schema.actions(), so it must pass through via the
-        # membership check WITHOUT ever consulting _ALIAS.
+    def test_build_forester_resolves_via_spec_to_action(self):
+        # planner.GOAL_SPECS now carries "build_forester" -> "Forester" (the real
+        # buildings.json spec), so spec_to_action resolves it directly - the same
+        # branch every other real-spec goal uses. This is what the planner
+        # actually emits today (see the synthetic membership-fallback test below
+        # for the historical/edge-case path this coincided with pre-rename).
+        from agent.nlp.labeler import _to_schema_id
+        self.assertEqual(
+            game_schema.spec_to_action("Forester"), "build_forester"
+        )  # precondition
+        goal = {"id": "build_forester", "spec": "Forester"}
+        self.assertEqual(_to_schema_id(goal, self.actions), "build_forester")
+
+    def test_membership_fallback_when_spec_unresolvable_but_id_already_valid(self):
+        # Synthetic edge case, not something the real planner emits anymore: if a
+        # goal's spec is unresolvable (spec_to_action returns None) but its id
+        # already happens to be a member of game_schema.actions(), membership
+        # passes it through WITHOUT ever consulting _ALIAS. Before the buildings-
+        # spec-name fix this was planner.py's ACTUAL behavior for build_forester
+        # (whose GOAL_SPECS entry was misspelled "ForesterFlag", which
+        # coincidentally still resolved by id membership); kept here as direct
+        # coverage of the membership branch itself now that build_forester's real
+        # path is spec_to_action (see the test above).
         from agent.nlp.labeler import _to_schema_id
         self.assertIsNone(game_schema.spec_to_action("ForesterFlag"))  # precondition
         goal = {"id": "build_forester", "spec": "ForesterFlag"}

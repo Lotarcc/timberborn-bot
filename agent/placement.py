@@ -20,13 +20,7 @@ PROFILES = {
         "dc": 1.5,
         "dc_scale": 30,
     },
-    "ForesterFlag": {
-        "moist_cluster": 6.0,
-        "contamination": -10.0,
-        "dc": 1.5,
-        "dc_scale": 30,
-    },
-    "EfficientFarmhouse": {
+    "EfficientFarmHouse": {
         "moist_cluster": 6.0,
         "contamination": -10.0,
         "dc": 1.5,
@@ -69,10 +63,9 @@ PROFILES = {
         "related": (
             "LumberjackFlag",
             "Forester",
-            "ForesterFlag",
             "LumberMill",
             "GearWorkshop",
-            "EfficientFarmhouse",
+            "EfficientFarmHouse",
         ),
     },
     "Inventor": {
@@ -123,7 +116,7 @@ def score_for_spec(spec, arrays, resources, dc_xy, occupied_extra=None):
         layers.append(
             (spatial.influence(bad_distance, profile["badwater_scale"]), profile["badwater"])
         )
-    elif spec in ("Forester", "ForesterFlag", "EfficientFarmhouse"):
+    elif spec in ("Forester", "EfficientFarmHouse"):
         allowed = spatial.plantable_mask(grid)
         labels, regions = spatial.label_regions(allowed, width, height)
         sizes = {region["id"]: region["size"] for region in regions}
@@ -172,7 +165,7 @@ def score_for_spec(spec, arrays, resources, dc_xy, occupied_extra=None):
             allowed[index] = False
         if spec != "Path" and _value(grid["on_road"], index, 0):
             allowed[index] = False
-        if spec not in ("Forester", "ForesterFlag", "EfficientFarmhouse", "Path"):
+        if spec not in ("Forester", "EfficientFarmHouse", "Path"):
             if not walkable[index]:
                 allowed[index] = False
         if spec == "WaterPump":
@@ -337,7 +330,7 @@ def _related_points(records, related_specs):
 def _why_for_spec(spec, resources, occupied_extra):
     if spec == "WaterPump":
         return "clean water depth 1..2 outside badwater reach; near district center"
-    if spec in ("Forester", "ForesterFlag", "EfficientFarmhouse"):
+    if spec in ("Forester", "EfficientFarmHouse"):
         return "plantable moist cluster; uncontaminated; near district center"
     if spec == "LumberjackFlag":
         return "near densest mature-tree cluster; near district center"

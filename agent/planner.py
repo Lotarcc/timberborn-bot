@@ -70,11 +70,11 @@ COST_LOGS = {
     "WaterPump": 12,
     "SmallTank": 15,
     "Lodge": 12,
-    "EfficientFarmhouse": 25,
+    "EfficientFarmHouse": 25,
     "SmallWarehouse": 18,  # v-check: verify against /blueprints.
     "Inventor": 30,  # v-check: verify against /blueprints.
     "Dam": 20,  # Per tile.
-    "ForesterFlag": 0,  # v-check: verify against /blueprints.
+    "Forester": 0,  # v-check: verify against /blueprints.
 }
 
 
@@ -83,11 +83,11 @@ GOAL_SPECS = {
     "build_water_pump": "WaterPump",
     "build_water_storage": "SmallTank",
     "build_gatherer": "GathererFlag",
-    "build_farm": "EfficientFarmhouse",
+    "build_farm": "EfficientFarmHouse",
     "build_lodge": "Lodge",
     "build_warehouse": "SmallWarehouse",
     "build_inventor": "Inventor",
-    "build_forester": "ForesterFlag",
+    "build_forester": "Forester",
     "build_path": "Path",
 }
 
@@ -197,7 +197,7 @@ def analyze(state, map_data, buildings_detail=None):
             _goal(
                 "build_farm",
                 "food days remaining is below next hazard duration plus 2-day buffer",
-                spec="EfficientFarmhouse",
+                spec="EfficientFarmHouse",
                 logs_have=_logs_available(state),
             )
         )
@@ -233,12 +233,12 @@ def analyze(state, map_data, buildings_detail=None):
             )
         )
 
-    if _building_count(state, "ForesterFlag") <= 0:
+    if _building_count(state, "Forester") <= 0:
         goals.append(
             _goal(
                 "build_forester",
                 "wood sustain comes after warehouse and science; Forester replants moist empty tiles",
-                spec="ForesterFlag",
+                spec="Forester",
                 logs_have=_logs_available(state),
             )
         )
@@ -798,10 +798,10 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
             candidate = None
             if spec == "WaterPump":
                 candidate = _water_pump_candidate(arrays, tile)
-            elif spec == "EfficientFarmhouse":
+            elif spec == "EfficientFarmHouse":
                 if tile["moist"] == 1:
                     candidate = _candidate(tile, "moist=1")
-            elif spec == "ForesterFlag":
+            elif spec == "Forester":
                 if tile["moist"] == 1:
                     candidate = _candidate(tile, "moist replanting tile")
                     candidate["planting_tiles"] = _nearby_moist_tiles(arrays, tile, set(), limit=12)
@@ -1070,7 +1070,7 @@ def _coords(building):
 
 
 def _has_food_production(state):
-    return any(_building_count(state, spec) > 0 for spec in ("GathererFlag", "EfficientFarmhouse", "Farmhouse"))
+    return any(_building_count(state, spec) > 0 for spec in ("GathererFlag", "EfficientFarmHouse", "Farmhouse"))
 
 
 def _has_storage(state):
@@ -1266,9 +1266,9 @@ def _resource_aware_candidates(goal_id, spec, state, map_data, arrays, dc, fallb
         return _gatherer_resource_candidates(arrays, dc, resources, road_reachable, blocked, limit)
     if goal_id == "build_water_pump" or spec == "WaterPump":
         return _water_resource_candidates(arrays, dc, road_reachable, blocked, limit)
-    if goal_id == "build_farm" or spec == "EfficientFarmhouse":
+    if goal_id == "build_farm" or spec == "EfficientFarmHouse":
         return _moist_cluster_candidates(arrays, dc, road_reachable, blocked, limit, "moist farm cluster")
-    if goal_id == "build_forester" or spec == "ForesterFlag":
+    if goal_id == "build_forester" or spec == "Forester":
         return _moist_cluster_candidates(arrays, dc, road_reachable, blocked, limit, "moist replanting cluster")
     return []
 

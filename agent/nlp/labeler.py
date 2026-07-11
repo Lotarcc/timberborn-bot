@@ -30,15 +30,19 @@ from agent import controller, game_schema, planner
 
 _FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 
-# The one bootstrap goal spec_to_action cannot resolve: planner.GOAL_SPECS carries
-# "build_farm" -> spec "EfficientFarmhouse" (lowercase "h"), but the real spec in
-# buildings.json is "EfficientFarmHouse", so game_schema.spec_to_action returns None
-# for the planner's spelling. Every other bootstrap goal either resolves via its
-# spec (build_lumberjack, build_water_pump, build_water_storage, build_gatherer,
-# build_lodge, build_warehouse, build_inventor) or its literal id already happens to
-# be a game_schema id (build_forester). Deliberately NOT fixed in planner.py here -
-# GOAL_SPECS is left as-is for a separate task; this module only translates at the
-# labeler boundary.
+# Historical note: planner.GOAL_SPECS used to carry "build_farm" -> spec
+# "EfficientFarmhouse" (lowercase "h") while the real spec in buildings.json is
+# "EfficientFarmHouse", so game_schema.spec_to_action returned None for the
+# planner's spelling and this alias was the only way to translate build_farm to a
+# schema id. planner.py now uses the real buildings.json spec names
+# ("EfficientFarmHouse", "Forester") throughout, so spec_to_action resolves
+# build_farm and build_forester directly like every other bootstrap goal
+# (build_lumberjack, build_water_pump, build_water_storage, build_gatherer,
+# build_lodge, build_warehouse, build_inventor) - this alias is no longer
+# exercised by the real planner. Kept as a defensive fallback (belt-and-suspenders)
+# for any goal dict that still carries the old misspelling; see
+# ToSchemaIdHelperTests.test_alias_used_only_when_spec_is_unresolvable in
+# agent/nlp/test_labeler_schema.py for direct coverage of the fallback path.
 _ALIAS = {"build_farm": "build_efficient_farm_house"}
 
 
@@ -46,9 +50,11 @@ def _to_schema_id(goal: dict, actions_set: set) -> str:
     """Translate one planner goal dict to a valid game_schema.actions() id.
 
     Order matters: demolish first (it never carries a game_schema spec), then
-    spec_to_action (resolves every real-spec goal, bootstrap or economy), then
-    verbatim membership (catches verb actions and the build_forester coincidence),
-    and finally the hand-verified _ALIAS as the last resort.
+    spec_to_action (resolves every real-spec goal, bootstrap or economy - this
+    includes build_farm and build_forester now that planner.py emits their real
+    buildings.json spec names), then verbatim membership (catches verb actions),
+    and finally the hand-verified _ALIAS as a last-resort fallback for a goal
+    whose spec doesn't resolve.
     """
     gid = str(goal.get("id", ""))
     if gid.startswith("demolish_unreachable"):
