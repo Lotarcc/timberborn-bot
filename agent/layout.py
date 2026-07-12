@@ -61,7 +61,9 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 import unittest
+from collections import deque
 
 # `agent/` has no __init__.py, and this module is designed to run standalone
 # (`python3 agent/layout.py`) as well as via package-qualified imports (`python3
@@ -528,6 +530,7 @@ def _map_grid(map_data):
         "water": arr("water_depth", "water"),
         "occupied": arr("occupied"),
         "reachable": arr("reachable"),
+        "on_road": arr("on_road"),
         "total": max(0, width * height),
     }
 
@@ -749,6 +752,320 @@ def assign_zones(map_data, state=None, categories=None):
     regions[GENERAL_ZONE] = leftover_xy | unreached_xy
 
     return Zones(regions, categories)
+
+
+# ---------------------------------------------------------------------------
+# LP3 -- coordinated batch placement + boxing/connectivity check
+# ---------------------------------------------------------------------------
+#
+# `plan_placements` is the design doc's Algorithm steps 2-3: given the next
+# few WANTED specs (in priority order), place them one at a time against a
+# SHARED `Reservation`/`Zones` pair so each later spec already sees the
+# earlier ones' footprints -- the "coordination" that stops a batch from
+# claiming the same tile twice or sealing a neighbor in. Verticality (LP4)
+# is out of scope here: every placement sits at the ground surface
+# (`terrain_height_lookup`); a spec with no valid ground tile is SKIPPED,
+# not silently escalated to a platform.
+#
+# The BOXING CHECK is the crux (step 4 of the design doc): a tile that fits
+# and has a doorstep can STILL be wrong to reserve if doing so would sever
+# the walkable network -- cutting an existing building off from the
+# District Center, or filling in the last scrap of buildable frontier. Each
+# candidate is therefore tentatively reserved, flood-filled from the DC over
+# the WALKABLE graph (`_walkable_flood`), and un-reserved again; only the
+# tile that is ultimately kept stays reserved.
+#
+# Bounded, not exhaustive: only the `_LP3_MAX_CANDIDATE_TILES` tiles closest
+# to the DC (Manhattan distance) are ever flood-fill-checked per spec. A
+# real zone can hold hundreds of tiles and the flood-fill is O(map size), so
+# checking every candidate in a big zone would be O(zone x map) per spec --
+# fine for the small synthetic maps in the tests, not for a real colony. See
+# the LP3 report for the tradeoff this bound makes.
+
+_LP3_MAX_CANDIDATE_TILES = 24
+_LP3_ORIENTATIONS = ("N", "E", "S", "W")
+
+
+def _spec_of(entry):
+    """A bare spec id string from either a plain spec string or a goal-like
+    dict carrying a `"spec"` key (the shape `planner.analyze`/
+    `controller.build_safe_ready_frontier` goals use). Does NOT resolve a
+    bare goal_id through `planner.GOAL_SPECS` -- `layout.py` stays
+    independent of `planner.py` like the rest of this module; a caller that
+    only has a goal_id should resolve it to a spec first. Returns `None` for
+    anything without a usable spec."""
+    spec = entry.get("spec") if isinstance(entry, dict) else entry
+    return str(spec) if spec else None
+
+
+def _note_skip(spec, reason):
+    """Best-effort stderr breadcrumb for a spec `plan_placements` could not
+    place. The function's return value is a plain `list[dict]` of
+    successful placements only -- this is the only trace of a skip a caller
+    not otherwise tracking goal state will see."""
+    print("layout.plan_placements: skipping %r -- %s" % (spec, reason), file=sys.stderr)
+
+
+def _manhattan(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def _walkable_predicate(reservation, grid, terrain_at):
+    """Build an `(x, y) -> bool` WALKABLE test: dry land (water_depth <= 0)
+    whose terrain-surface cell isn't claimed by a BUILT/RESERVED/PLATFORM
+    footprint, OR any `on_road` tile (a road is always walkable). Water is
+    an absolute blocker -- checked before `on_road` -- and out-of-bounds is
+    never walkable. Shared by `_walkable_flood`, the per-candidate access-
+    tile check, and the boxing check's frontier count, so all three agree on
+    what "walkable" means."""
+
+    def walkable(x, y):
+        col, row = x - grid["origin_x"], y - grid["origin_y"]
+        if not (0 <= col < grid["width"] and 0 <= row < grid["height"]):
+            return False
+        index = row * grid["width"] + col
+        if _num_at(grid["water"], index, 0.0) > 0:
+            return False
+        if _bool_at(grid["on_road"], index, False):
+            return True
+        z = terrain_at(x, y)
+        if z is None:
+            return False
+        return reservation.cells.get((x, y, z)) not in (BUILT, RESERVED, PLATFORM)
+
+    return walkable
+
+
+def _walkable_flood(reservation, map_data, start):
+    """BFS over WALKABLE tiles (free land + `on_road`; blocked by BUILT/
+    RESERVED/PLATFORM footprints and water) from bridge `(x, y)` `start`,
+    4-neighbour. `start` is always added to the returned set -- and its
+    walkable neighbours are always explored -- even if `start` is itself
+    blocked (e.g. the District Center's own footprint); mirrors
+    `spatial.distance_field`'s "seed the source even if impassable"
+    convention."""
+    grid = _map_grid(map_data)
+    if grid["total"] <= 0:
+        return set()
+    terrain_at = terrain_height_lookup(map_data)
+    walkable = _walkable_predicate(reservation, grid, terrain_at)
+
+    start = (_as_int(start[0]), _as_int(start[1]))
+    visited = {start}
+    queue = deque([start])
+    while queue:
+        x, y = queue.popleft()
+        for dx, dy in _ORTHOGONAL:
+            nxt = (x + dx, y + dy)
+            if nxt in visited or not walkable(*nxt):
+                continue
+            visited.add(nxt)
+            queue.append(nxt)
+    return visited
+
+
+def _frontier_size(reservation, grid, terrain_at, reached):
+    """Count of `reached` tiles that are still free (unclaimed) land -- the
+    open frontier a further placement could still use. Doubles as the
+    boxing check's "didn't shrink to nothing" gate and the tie-break when
+    ranking surviving candidates."""
+    count = 0
+    for (x, y) in reached:
+        col, row = x - grid["origin_x"], y - grid["origin_y"]
+        if not (0 <= col < grid["width"] and 0 <= row < grid["height"]):
+            continue
+        index = row * grid["width"] + col
+        if _num_at(grid["water"], index, 0.0) > 0:
+            continue
+        z = terrain_at(x, y)
+        if z is None:
+            continue
+        if reservation.cells.get((x, y, z)) in (BUILT, RESERVED, PLATFORM):
+            continue
+        count += 1
+    return count
+
+
+def _access_tiles(reservation, building):
+    """Bridge `(x, y)` tiles orthogonally adjacent to `building`'s full
+    footprint -- its candidate doorstep ring. `building` is a
+    `{"spec","x","y","z","orientation"}` dict: a `/state buildings.list`
+    entry (already BUILT) or an LP3 in-batch placement (RESERVED earlier
+    this same call) -- both shapes work. Malformed/incomplete input yields
+    `[]` rather than raising."""
+    if not isinstance(building, dict):
+        return []
+    spec = building.get("spec") or building.get("spec_id")
+    x, y, z = building.get("x"), building.get("y"), building.get("z")
+    if not spec or x is None or y is None or z is None:
+        return []
+    orientation = _normalize_orientation(building.get("orientation"))
+    footprint_xy = {
+        (fx, fy) for fx, fy, _fz in reservation.footprint_cells(spec, x, y, z, orientation)
+    }
+    access = set()
+    for (fx, fy) in footprint_xy:
+        for dx, dy in _ORTHOGONAL:
+            neighbor = (fx + dx, fy + dy)
+            if neighbor not in footprint_xy:
+                access.add(neighbor)
+    return list(access)
+
+
+def _has_access_tile(reservation, grid, terrain_at, spec, x, y, z, orientation):
+    """True if `spec`'s footprint at (x, y, z, orientation) has at least one
+    orthogonally-adjacent WALKABLE tile -- the building's doorstep (design
+    doc step 3). This approximates the entrance as "some adjacent free
+    tile"; the exact orientation-correct entrance is LP6's job."""
+    walkable = _walkable_predicate(reservation, grid, terrain_at)
+    footprint_xy = {
+        (fx, fy) for fx, fy, _fz in reservation.footprint_cells(spec, x, y, z, orientation)
+    }
+    for (fx, fy) in footprint_xy:
+        for dx, dy in _ORTHOGONAL:
+            neighbor = (fx + dx, fy + dy)
+            if neighbor not in footprint_xy and walkable(*neighbor):
+                return True
+    return False
+
+
+def _existing_buildings_for_boxing(state):
+    """`/state buildings.list` entries the boxing check must keep reachable
+    -- the same "finished"/"site" status filter as `Reservation.
+    reconcile_from_state` (a demolished/ghost entry has no doorstep worth
+    protecting)."""
+    out = []
+    for building in _buildings_from_state(state):
+        if not isinstance(building, dict):
+            continue
+        status = str(building.get("status", "finished") or "finished").lower()
+        if status in _RECONCILABLE_STATUSES:
+            out.append(building)
+    return out
+
+
+def _boxing_check(reservation, map_data, grid, terrain_at, dc_xy, protected_buildings):
+    """After a candidate footprint has been TENTATIVELY reserved: flood the
+    walkable network from the District Center and require (a) every
+    building in `protected_buildings` still has a reached access tile, and
+    (b) the reached free frontier hasn't shrunk to nothing. Returns
+    `(ok, frontier_size)`. Never mutates `reservation` -- the caller is
+    responsible for undoing its own tentative reservation either way."""
+    reached = _walkable_flood(reservation, map_data, dc_xy)
+    frontier = _frontier_size(reservation, grid, terrain_at, reached)
+    if frontier <= 0:
+        return False, frontier
+    for building in protected_buildings:
+        access = _access_tiles(reservation, building)
+        if access and not (reached & set(access)):
+            return False, frontier
+    return True, frontier
+
+
+def _best_placement(spec, candidates, reservation, map_data, grid, terrain_at, dc_xy,
+                     protected_buildings):
+    """Rank `candidates` by Manhattan distance to `dc_xy` (row-major
+    tie-break for determinism), keep only the nearest
+    `_LP3_MAX_CANDIDATE_TILES`, and return the best surviving `(x, y, z,
+    orientation)` -- fits, has an access tile, and passes the boxing check
+    -- or `None` if nothing in the bounded pool survives all three."""
+    ranked = sorted(candidates, key=lambda xy: (_manhattan(xy, dc_xy), xy[1], xy[0]))
+    ranked = ranked[:_LP3_MAX_CANDIDATE_TILES]
+
+    best = None
+    best_key = None
+    for (x, y) in ranked:
+        z = terrain_at(x, y)
+        if z is None:
+            continue
+        for orientation in _LP3_ORIENTATIONS:
+            if not reservation.fits(spec, x, y, z, orientation, terrain_at):
+                continue
+            if not _has_access_tile(reservation, grid, terrain_at, spec, x, y, z, orientation):
+                continue
+            reservation.reserve(spec, x, y, z, orientation, owner=RESERVED)
+            ok, frontier = _boxing_check(
+                reservation, map_data, grid, terrain_at, dc_xy, protected_buildings
+            )
+            reservation.free(spec, x, y, z, orientation)
+            if not ok:
+                continue
+            key = (_manhattan((x, y), dc_xy), -frontier, y, x)
+            if best_key is None or key < best_key:
+                best_key, best = key, (x, y, z, orientation)
+    return best
+
+
+def plan_placements(specs, map_data, reservation, zones, state=None):
+    """LP3 -- coordinated batch placement (`docs/kb/layout-planner-design.md`
+    Algorithm steps 2-3). Places `specs` (an ordered list of building spec
+    ids, or goal-like dicts carrying a `"spec"` key) ONE AT A TIME, IN
+    ORDER, against the SAME `reservation`/`zones` -- so spec #2 already sees
+    spec #1's tentative reservation from this same call and can't collide
+    with or box it in. Ground-only: every placement sits at `z =
+    terrain_height(x, y)`; verticality is LP4.
+
+    For each spec, in order:
+      1. Candidate tiles = `zones.zone_for_spec(spec)`, falling back to any
+         reachable land (`_reachable_land_mask`) if the zone is empty.
+      2. `reservation.fits(...)` -- free footprint + supported, tried at
+         each of the 4 orientations -- so it can't overlap anything built/
+         reserved, INCLUDING earlier placements from this same batch.
+      3. An access tile: some orthogonally-adjacent WALKABLE tile (the
+         building's doorstep; `_has_access_tile`).
+      4. The BOXING CHECK (`_boxing_check`): tentatively reserve the
+         footprint and flood-fill the walkable network from the District
+         Center; reject the tile if that flood no longer reaches every
+         existing/already-placed building's access tile, or has no free
+         frontier left. The tentative reservation is undone regardless.
+      5. Keep the surviving tile closest to the DC (frontier size breaks
+         ties), and PERMANENTLY reserve it (`owner=RESERVED`) before moving
+         on to the next spec -- so it also becomes protected for the boxing
+         check of every spec still to come.
+
+    A spec that finds no valid tile is SKIPPED, never raised (see
+    `_note_skip`) -- it is simply absent from the returned list.
+
+    Returns `[{"spec","x","y","z","orientation"}, ...]`, at most one entry
+    per input spec, in `specs` order.
+    """
+    grid = _map_grid(map_data)
+    if grid["total"] <= 0 or not specs:
+        return []
+
+    terrain_at = terrain_height_lookup(map_data)
+    dc_xy = _district_center_xy(map_data, state, grid)
+    protected_buildings = _existing_buildings_for_boxing(state)
+    reachable_land_xy = None  # computed lazily -- only if a zone ever comes up empty
+
+    placements = []
+    for entry in specs:
+        spec = _spec_of(entry)
+        if not spec:
+            _note_skip(entry, "no spec")
+            continue
+
+        candidates = zones.zone_for_spec(spec)
+        if not candidates:
+            if reachable_land_xy is None:
+                reachable_land_xy = _mask_to_xy(_reachable_land_mask(grid), grid)
+            candidates = reachable_land_xy
+
+        winner = _best_placement(
+            spec, candidates, reservation, map_data, grid, terrain_at, dc_xy,
+            protected_buildings,
+        )
+        if winner is None:
+            _note_skip(spec, "no candidate tile fit + had access + passed the boxing check")
+            continue
+
+        x, y, z, orientation = winner
+        reservation.reserve(spec, x, y, z, orientation, owner=RESERVED)
+        placement = {"spec": spec, "x": x, "y": y, "z": z, "orientation": orientation}
+        placements.append(placement)
+        protected_buildings = protected_buildings + [placement]
+
+    return placements
 
 
 # ---------------------------------------------------------------------------
@@ -1263,6 +1580,229 @@ class AssignZonesDegenerateInputTests(unittest.TestCase):
     def test_non_dict_map_does_not_raise(self):
         zones = assign_zones(None)
         self.assertEqual(zones.zone_for("water"), set())
+
+
+# ---------------------------------------------------------------------------
+# LP3 inline tests
+# ---------------------------------------------------------------------------
+
+def _open_map(width=6, height=6, origin=(0, 0), z=4):
+    """A fully flat, dry, unoccupied `/map` fixture for LP3 tests: every
+    tile is buildable land at terrain height `z`, all reachable, no roads.
+    The District Center defaults to the map's center tile."""
+    total = width * height
+    origin_x, origin_y = origin
+    return {
+        "origin": {"x": origin_x, "z": origin_y},
+        "width": width,
+        "height": height,
+        "terrain_height": [z] * total,
+        "water_depth": [0] * total,
+        "occupied": [0] * total,
+        "reachable": [1] * total,
+        "on_road": [0] * total,
+        "district_center": {"x": origin_x + width // 2, "y": origin_y + height // 2},
+    }
+
+
+def _corridor_map():
+    """A 5x3 fixture with a single 1-wide dry corridor at row y=1 connecting
+    a District Center stand-in at (0, 1) to an existing building at (4, 1);
+    rows y=0 and y=2 are water except a single land tile at (1, 2) -- a
+    dead-end alcove reachable ONLY through the corridor tile (1, 1), never
+    through the through-corridor tile (2, 1). Used by `BoxingCheckTests`:
+    reserving (2, 1) severs the corridor (boxing); reserving (1, 2) does
+    not."""
+    width, height = 5, 3
+    total = width * height
+
+    def index(x, y):
+        return y * width + x
+
+    terrain = [4] * total
+    water = [0] * total
+    for x in range(width):
+        water[index(x, 0)] = 3  # row 0: all water
+        water[index(x, 2)] = 3  # row 2: all water...
+    water[index(1, 2)] = 0      # ...except the (1, 2) alcove
+
+    occupied = [0] * total
+    occupied[index(0, 1)] = 1  # DC stand-in
+    occupied[index(4, 1)] = 1  # existing building
+
+    return {
+        "origin": {"x": 0, "z": 0},
+        "width": width,
+        "height": height,
+        "terrain_height": terrain,
+        "water_depth": water,
+        "occupied": occupied,
+        "reachable": [1] * total,
+        "on_road": [0] * total,
+        "district_center": {"x": 0, "y": 1},
+    }
+
+
+class WalkableFloodTests(unittest.TestCase):
+    def setUp(self):
+        self.map_data = _open_map(4, 4)
+        for row in range(4):
+            self.map_data["water_depth"][row * 4 + 2] = 3  # column x=2 is all water
+        self.reservation = Reservation(stacking=_TEST_STACKING)
+
+    def test_water_blocks_the_flood(self):
+        reached = _walkable_flood(self.reservation, self.map_data, (0, 0))
+        self.assertIn((1, 0), reached)
+        self.assertNotIn((3, 0), reached)
+
+    def test_reserved_footprint_blocks_the_flood(self):
+        self.map_data["water_depth"][1 * 4 + 2] = 0  # punch a gap at (2, 1)
+        reached = _walkable_flood(self.reservation, self.map_data, (0, 0))
+        self.assertIn((3, 0), reached)  # now reachable through the gap
+
+        self.reservation.reserve("Hut", 2, 1, 4, "N", owner=RESERVED)
+        blocked = _walkable_flood(self.reservation, self.map_data, (0, 0))
+        self.assertNotIn((3, 0), blocked)  # the gap itself is now claimed
+
+    def test_start_is_always_seeded_even_if_blocked(self):
+        self.reservation.reserve("Hut", 0, 0, 4, "N", owner=BUILT)
+        reached = _walkable_flood(self.reservation, self.map_data, (0, 0))
+        self.assertIn((0, 0), reached)  # the seed itself, even though BUILT
+        self.assertIn((1, 0), reached)  # its walkable neighbour is still explored
+
+
+class AccessTilesTests(unittest.TestCase):
+    def setUp(self):
+        self.reservation = Reservation(stacking=_TEST_STACKING)
+
+    def test_returns_ring_around_footprint_excluding_footprint_itself(self):
+        building = {"spec": "Big", "x": 5, "y": 5, "z": 4, "orientation": "N"}  # 2x3
+        access = set(_access_tiles(self.reservation, building))
+        footprint_xy = {(5, 5), (6, 5), (5, 6), (6, 6), (5, 7), (6, 7)}
+        self.assertTrue(footprint_xy.isdisjoint(access))
+        for tile in ((4, 5), (4, 6), (4, 7), (7, 5), (7, 6), (7, 7), (5, 4), (6, 4), (5, 8), (6, 8)):
+            self.assertIn(tile, access)
+
+    def test_malformed_building_yields_empty_list(self):
+        self.assertEqual(_access_tiles(self.reservation, {}), [])
+        self.assertEqual(_access_tiles(self.reservation, None), [])
+
+
+class PlanPlacementsBasicTests(unittest.TestCase):
+    def test_two_specs_in_the_same_zone_do_not_overlap_and_stay_reachable(self):
+        map_data = _open_map(6, 6)
+        reservation = Reservation(stacking=_TEST_STACKING)
+        zones = Zones({"housing": {(0, 0), (1, 0), (0, 1), (1, 1)}},
+                       categories={"Hut": "housing"})
+
+        placements = plan_placements(["Hut", "Hut"], map_data, reservation, zones)
+
+        self.assertEqual(len(placements), 2)
+        cells = [
+            set(reservation.footprint_cells(p["spec"], p["x"], p["y"], p["z"], p["orientation"]))
+            for p in placements
+        ]
+        self.assertTrue(cells[0].isdisjoint(cells[1]))
+        dc = (map_data["district_center"]["x"], map_data["district_center"]["y"])
+        reached = _walkable_flood(reservation, map_data, dc)
+        for p in placements:
+            self.assertTrue(set(_access_tiles(reservation, p)) & reached)
+
+    def test_batch_of_three_all_placed_disjoint_and_reachable(self):
+        map_data = _open_map(6, 6)
+        reservation = Reservation(stacking=_TEST_STACKING)
+        zones = Zones({"housing": {(0, 0), (1, 0), (0, 1), (1, 1)}},
+                       categories={"Hut": "housing"})
+
+        placements = plan_placements(["Hut", "Hut", "Hut"], map_data, reservation, zones)
+
+        self.assertEqual(len(placements), 3)
+        dc = (map_data["district_center"]["x"], map_data["district_center"]["y"])
+        reached = _walkable_flood(reservation, map_data, dc)
+        seen = set()
+        for p in placements:
+            cells = set(reservation.footprint_cells(p["spec"], p["x"], p["y"], p["z"], p["orientation"]))
+            self.assertTrue(cells.isdisjoint(seen))
+            seen |= cells
+            self.assertTrue(set(_access_tiles(reservation, p)) & reached)
+
+    def test_unplaceable_spec_is_skipped_not_crashed(self):
+        map_data = _open_map(6, 6)
+        map_data["occupied"] = [1] * 36  # kill the "any reachable land" fallback
+        reservation = Reservation(stacking=_TEST_STACKING)
+        zones = Zones({"housing": {(2, 2), (3, 2)}},
+                       categories={"Hut": "housing"})  # "Ghost" left uncategorized
+
+        placements = plan_placements(["Hut", "Hut", "Ghost"], map_data, reservation, zones)
+
+        self.assertEqual(len(placements), 2)
+        self.assertEqual({p["spec"] for p in placements}, {"Hut"})
+
+    def test_empty_specs_list_returns_empty(self):
+        map_data = _open_map(4, 4)
+        reservation = Reservation(stacking=_TEST_STACKING)
+        zones = Zones({})
+        self.assertEqual(plan_placements([], map_data, reservation, zones), [])
+
+    def test_goal_like_dict_entries_are_accepted(self):
+        map_data = _open_map(6, 6)
+        reservation = Reservation(stacking=_TEST_STACKING)
+        zones = Zones({"housing": {(0, 0)}}, categories={"Hut": "housing"})
+
+        placements = plan_placements(
+            [{"id": "build_hut", "spec": "Hut"}], map_data, reservation, zones
+        )
+
+        self.assertEqual(len(placements), 1)
+        self.assertEqual(placements[0]["spec"], "Hut")
+
+
+class BoxingCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.map_data = _corridor_map()
+        self.reservation = Reservation(stacking=_TEST_STACKING)
+        self.reservation.reserve("Hut", 0, 1, 4, "N", owner=BUILT)  # DC stand-in
+        self.reservation.reserve("Hut", 4, 1, 4, "N", owner=BUILT)  # existing building
+        self.state = {"buildings": {"list": [
+            {"spec": "Hut", "x": 4, "y": 1, "z": 4, "orientation": "N", "status": "finished"},
+        ]}}
+        # The zone offers BOTH the through-corridor tile (2, 1) [boxes the
+        # existing building] and the dead-end alcove (1, 2) [safe]. (2, 1)
+        # ranks closer to the DC by the planner's own tie-break (see the
+        # sanity check below), so picking the alcove instead proves the
+        # boxing check -- not luck -- decided it.
+        self.zones = Zones({"z": {(2, 1), (1, 2)}}, categories={"Hut": "z"})
+
+    def test_boxing_tile_rejected_alcove_chosen_instead(self):
+        placements = plan_placements(
+            ["Hut"], self.map_data, self.reservation, self.zones, state=self.state
+        )
+        self.assertEqual(len(placements), 1)
+        self.assertEqual((placements[0]["x"], placements[0]["y"]), (1, 2))
+
+    def test_corridor_tile_alone_would_have_ranked_first(self):
+        # Sanity check on the fixture itself: without the boxing check,
+        # naive nearest-tile-first ranking WOULD pick (2, 1) -- so the
+        # (1, 2) result above is the boxing check's doing, not the
+        # ranking's.
+        dc_xy = (0, 1)
+        ranked = sorted(self.zones.zone_for("z"), key=lambda xy: (_manhattan(xy, dc_xy), xy[1], xy[0]))
+        self.assertEqual(ranked[0], (2, 1))
+
+
+class BoxingFrontierExhaustionTests(unittest.TestCase):
+    def test_candidate_that_would_zero_the_frontier_is_rejected_and_spec_skipped(self):
+        # (0,0) DC, (1,0) candidate, (2,0) the only other tile -- reserving
+        # (1,0) would cut the DC off from (2,0), leaving no free frontier.
+        map_data = _open_map(3, 1)
+        map_data["district_center"] = {"x": 0, "y": 0}
+        reservation = Reservation(stacking=_TEST_STACKING)
+        reservation.reserve("Hut", 0, 0, 4, "N", owner=BUILT)  # DC stand-in
+        zones = Zones({"z": {(1, 0)}}, categories={"Hut": "z"})
+
+        placements = plan_placements(["Hut"], map_data, reservation, zones)
+
+        self.assertEqual(placements, [])
 
 
 if __name__ == "__main__":
