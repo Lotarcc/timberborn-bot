@@ -104,6 +104,24 @@ GOAL_DEPENDENCIES = {
 
 DIRECTIONS = ((0, -1, "North"), (1, 0, "East"), (0, 1, "South"), (-1, 0, "West"))
 
+# Reservoir-engineering specs (the Dam/Levee/Floodgate family) sit ON the water
+# body itself -- they block or channel a water column -- unlike every other
+# building, which needs dry land. See docs/kb/placement-verticality-gaps.md gap
+# #2: these were falling through to the generic flat-DRY-land scan, so they
+# could never be placed correctly. Both forms are matched in candidates_for:
+# the resolved spec name (goal dicts emitted by _append_drought_goals carry an
+# explicit "spec") and the raw build_<x> goal id (these specs are DB/economy-
+# driven, not in the small hand-written GOAL_SPECS table, so a bare "build_dam"
+# string goal resolves through _goal_spec to itself, not to "Dam").
+RESERVOIR_SPECS = (
+    "Dam", "Levee", "Floodgate", "DoubleFloodgate", "TripleFloodgate",
+    "Sluice", "Valve", "FillValve",
+)
+RESERVOIR_GOAL_IDS = {
+    "build_dam", "build_levee", "build_floodgate", "build_double_floodgate",
+    "build_triple_floodgate", "build_sluice", "build_valve", "build_fill_valve",
+}
+
 # Keep the tiles around the District Center (town hall) clear for the PATH network —
 # no buildings may sit on the town-hall approaches. Exclude building candidates within
 # this Chebyshev distance of the DC centre (covers the ~3x3 DC footprint + a 1-tile
@@ -770,6 +788,22 @@ def candidates_for(goal, state, map_data, k=6, resources=None):
     # Buildings (everything except a Path) must stay off the town-hall approaches.
     keep_townhall_clear = spec != "Path"
 
+    # RESERVOIR ENGINEERING: Dam/Levee/Floodgate/DoubleFloodgate/TripleFloodgate/
+    # Sluice/Valve/FillValve must sit ON water (water_depth > 0), never on the
+    # generic flat-dry-land tiles below. Routed BEFORE the resource-aware/generic
+    # paths (which require dry land) and returned unconditionally -- including
+    # empty -- so a dry-land tile is never substituted for a missing water site.
+    if spec in RESERVOIR_SPECS or str(goal_id) in RESERVOIR_GOAL_IDS:
+        road_reachable = _road_reachable_tiles(map_data, arrays, reachable)
+        reservoir_candidates = _reservoir_candidates(
+            arrays, dc, road_reachable, max(_as_int(k, 6), 0)
+        )
+        if keep_townhall_clear:
+            reservoir_candidates = [
+                c for c in reservoir_candidates if not _blocks_townhall(c, dc)
+            ]
+        return reservoir_candidates
+
     resource_candidates = _resource_aware_candidates(
         goal_id, spec, state, map_data, arrays, dc, reachable, resources, k
     )
@@ -1330,6 +1364,43 @@ def _water_resource_candidates(arrays, dc, road_reachable, blocked, limit):
             candidates.append((_distance(tile, dc), tile["y"], tile["x"], candidate))
     candidates.sort()
     return [item[-1] for item in candidates[:limit]]
+
+
+def _reservoir_candidates(arrays, dc, road_reachable, limit):
+    """Water-tile candidates for reservoir-engineering walls (Dam/Levee/Floodgate/...).
+
+    Unlike every other building these sit ON the water body (water_depth > 0),
+    not on dry land -- a dam/levee/floodgate blocks or channels a water column.
+    Candidates are water tiles with at least one REACHABLE dry-land neighbor (the
+    bank a beaver actually stands on to build the wall) -- a simple shoreline
+    heuristic that also naturally favors a channel over open, unreachable water.
+    Ranked by proximity to the district center, like every other candidate list.
+    Candidate z is left as the tile's terrain height (same as _candidate() uses
+    everywhere else) -- no stacking/height invention here, that's a separate task.
+    """
+    candidates = []
+    for row in range(arrays["height"]):
+        for col in range(arrays["width"]):
+            tile = _tile(arrays, col, row)
+            if tile is None or tile["water"] <= 0 or tile["occupied"]:
+                continue
+            if not _shoreline_to_reachable_land(arrays, tile, road_reachable):
+                continue
+            candidate = _candidate(tile, "water channel edge; reachable bank adjacent")
+            candidates.append((_distance(tile, dc), tile["y"], tile["x"], candidate))
+    candidates.sort()
+    return [item[-1] for item in candidates[:limit]]
+
+
+def _shoreline_to_reachable_land(arrays, tile, road_reachable):
+    """True if a water ``tile`` has >=1 reachable dry-land neighbor (a bank)."""
+    for dx, dy, _direction in DIRECTIONS:
+        other = _tile(arrays, tile["col"] + dx, tile["row"] + dy)
+        if other is None:
+            continue
+        if _is_land(other) and (other["x"], other["y"]) in road_reachable:
+            return True
+    return False
 
 
 def _moist_cluster_candidates(arrays, dc, road_reachable, blocked, limit, label):
