@@ -40,18 +40,43 @@ and `Stackable = BlockObject` with a spec's `stackable` flag:
 A spec missing from `building_stacking.json` defaults to size 1x1x1, base_matter
 "ground", not stackable.
 
-Pure-stdlib, no network/torch. Runs standalone: `python3 agent/layout.py`.
+## Zones (LP2)
+`assign_zones(map_data, state=None) -> Zones` partitions the reachable LAND
+around the District Center into per-category regions -- the "memory of where
+you want what" from the design doc's step 1 (`docs/kb/layout-planner-design.md`).
+It is a separate, persisted structure from `Reservation`: `Reservation` tracks
+what IS built/claimed; `Zones` tracks what AREA each building CATEGORY should
+draw from when a batch placer (LP3, not built here) looks for a tile. Compute
+it once per colony and hold onto the result -- `Zones.reconcile(map_data,
+state)` drops tiles the colony has since built on without re-scoring the
+partition. See the `Zones`/`assign_zones` docstrings below for the
+per-category heuristics.
+
+Pure-stdlib, no network/torch (this module's own code; `agent.spatial`, its one
+sibling dependency, is pure-stdlib too). Runs standalone: `python3 agent/layout.py`.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import unittest
+
+# `agent/` has no __init__.py, and this module is designed to run standalone
+# (`python3 agent/layout.py`) as well as via package-qualified imports (`python3
+# -m unittest agent.layout`), so try the package-relative import first and fall
+# back to the bare sibling import that resolves when sys.path[0] is agent/
+# itself. Mirrors the identical fallback at the top of replay.py.
+try:
+    from agent import spatial
+except ImportError:
+    import spatial
 
 _AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.join(_AGENT_DIR, "data")
 _STACKING_PATH = os.path.join(_DATA_DIR, "building_stacking.json")
+_BUILDINGS_PATH = os.path.join(_DATA_DIR, "buildings.json")
 
 # --- owner vocabulary ---------------------------------------------------------
 BUILT = "built"
@@ -378,6 +403,355 @@ class Reservation:
 
 
 # ---------------------------------------------------------------------------
+# LP2 -- per-category zone assignment
+# ---------------------------------------------------------------------------
+#
+# `Zones` partitions the reachable LAND around the District Center into
+# REGIONS reserved per building CATEGORY: the "memory of where you want
+# what" from the design doc. `assign_zones(map_data, state=None)` computes
+# the partition ONCE from a `/map` snapshot (+ `/state` for the DC position
+# if `/map` doesn't carry one); hold the returned `Zones` across cycles like
+# `Reservation` and call `.reconcile(map_data, state=None)` to refresh
+# availability -- it never re-scores or re-partitions.
+#
+# Scoring heuristics per category (kept pragmatic -- see the LP2 report for
+# the rationale):
+#   water              -- land orthogonally adjacent to clean, non-badwater-
+#                         reachable water (`spatial.deep_clean_water_edges`):
+#                         a pump's placement condition.
+#   food, forestry     -- moist, dry, unoccupied land
+#                         (`spatial.plantable_mask`). Both categories share
+#                         the same tile pool: farms and foresters both want
+#                         moist soil, and nothing else here competes for it.
+#   power              -- the SAME water-edge tiles as `water` (river
+#                         frontage for water wheels) UNION "locally high"
+#                         tiles: land strictly above the average height of
+#                         its orthogonal neighbors (a local rise, for wind
+#                         turbines). The overlap with `water` is intentional
+#                         -- both a pump and a wheel want river frontage;
+#                         arbitrating a shared tile is LP3's job, not LP2's.
+#   housing, storage,  -- FLAT (uniform-height small neighborhood),
+#   science,              reachable, dry, unclaimed land (i.e. land not
+#   monuments,            already in the water/food/forestry/power pools
+#   industry              above), ringed out from the District Center by BFS
+#                         distance and sliced into contiguous, equal-sized
+#                         chunks in that order -- housing nearest the DC,
+#                         industry farthest, storage keeping its traditional
+#                         spot between consumers and producers. A coarse but
+#                         testable stand-in for real contiguous-district
+#                         partitioning; `spatial.label_regions`/
+#                         `voronoi_districts` are natural upgrades if the
+#                         quantile-ring split proves too coarse in practice.
+#   general            -- fallback: reachable land claimed by none of the
+#                         above (non-flat leftover land, or any land beyond
+#                         what the ring categories consumed), AND the target
+#                         `zone_for`/`zone_for_spec` resolve to for any
+#                         category this module doesn't specialize (e.g. a
+#                         "decoration"/"logic"/"paths"/"district" building,
+#                         or an unrecognized spec).
+#
+# A tile with `water_depth > 0` is NEVER itself a region member -- every
+# region is land a building sits ON, not the water tile itself (a pump sits
+# beside the river, not in it).
+
+GENERAL_ZONE = "general"
+_LAND_RING_ORDER = ("housing", "storage", "science", "monuments", "industry")
+_SPECIALIZED_CATEGORIES = ("water", "food", "forestry", "power")
+_ALL_ZONE_CATEGORIES = _LAND_RING_ORDER + _SPECIALIZED_CATEGORIES + (GENERAL_ZONE,)
+_ORTHOGONAL = ((0, -1), (1, 0), (0, 1), (-1, 0))
+
+_CATEGORY_CACHE = None
+
+
+def load_building_categories(path=None):
+    """`{bare_spec: category}` from `agent/data/buildings.json` (faction
+    suffix stripped, mirroring `economy.py::_building_by_spec`). Defensive
+    like `load_stacking_data`: a missing/unreadable/malformed file yields
+    `{}`, so `category_of_spec` degrades to the general fallback rather than
+    raising. Cached in-process for the default path."""
+    global _CATEGORY_CACHE
+    if path is None and _CATEGORY_CACHE is not None:
+        return _CATEGORY_CACHE
+    target = path or _BUILDINGS_PATH
+    try:
+        with open(target, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        data = {}
+    buildings = data.get("buildings") if isinstance(data, dict) else None
+    out = {}
+    for building in buildings if isinstance(buildings, list) else []:
+        if not isinstance(building, dict):
+            continue
+        spec = str(building.get("id") or "").split(".")[0]
+        category = building.get("category")
+        if spec and isinstance(category, str):
+            out[spec] = category
+    if path is None:
+        _CATEGORY_CACHE = out
+    return out
+
+
+def category_of_spec(spec, categories=None):
+    """`spec`'s building category (faction suffix stripped either way), or
+    `None` if `spec` is unknown/uncategorized."""
+    categories = categories if categories is not None else load_building_categories()
+    return categories.get(str(spec or "").split(".")[0])
+
+
+def _map_grid(map_data):
+    """Normalize a `/map` payload into the plain row-major arrays LP2 scores
+    against (mirrors `terrain_height_lookup`'s origin/width/height parsing;
+    kept separate from `spatial`'s private `_arrays` so this module doesn't
+    reach across another module's underscore boundary)."""
+    if not isinstance(map_data, dict):
+        map_data = {}
+    width = _as_int(map_data.get("width"), 0)
+    height = _as_int(map_data.get("height"), 0)
+    origin = map_data.get("origin") or {}
+    origin_x = _as_int(origin.get("x", map_data.get("origin_x", 0)), 0)
+    origin_y = _as_int(origin.get("z", origin.get("y", map_data.get("origin_y", 0))), 0)
+
+    def arr(*keys):
+        for key in keys:
+            value = map_data.get(key)
+            if isinstance(value, list):
+                return value
+        return []
+
+    return {
+        "width": width,
+        "height": height,
+        "origin_x": origin_x,
+        "origin_y": origin_y,
+        "terrain": arr("terrain_height", "terrain"),
+        "water": arr("water_depth", "water"),
+        "occupied": arr("occupied"),
+        "reachable": arr("reachable"),
+        "total": max(0, width * height),
+    }
+
+
+def _num_at(values, index, default=0.0):
+    try:
+        return float(values[index])
+    except (IndexError, TypeError, ValueError):
+        return default
+
+
+def _bool_at(values, index, default=False):
+    try:
+        return bool(values[index])
+    except (IndexError, TypeError):
+        return default
+
+
+def _and_masks(a, b):
+    return [x and y for x, y in zip(a, b)]
+
+
+def _or_masks(a, b):
+    return [x or y for x, y in zip(a, b)]
+
+
+def _mask_to_xy(mask, grid):
+    """Bridge `(x, y)` for every truthy entry of a row-major `mask`."""
+    width, origin_x, origin_y = grid["width"], grid["origin_x"], grid["origin_y"]
+    return {
+        (origin_x + index % width, origin_y + index // width)
+        for index, value in enumerate(mask)
+        if value
+    }
+
+
+def _reachable_land_mask(grid):
+    """Dry, reachable, unoccupied tiles -- the substrate every zone draws
+    from. `reachable` defaults to passable when the array is missing/short
+    (mirrors `spatial.distance_field`'s `passable` default); `occupied`
+    defaults to free. A tile with `water_depth > 0` is never land."""
+    reachable, water, occupied = grid["reachable"], grid["water"], grid["occupied"]
+    return [
+        _bool_at(reachable, i, True)
+        and _num_at(water, i, 0.0) <= 0
+        and not _bool_at(occupied, i, False)
+        for i in range(grid["total"])
+    ]
+
+
+def _flat_mask(grid):
+    """True where a tile's terrain height matches every in-bounds orthogonal
+    neighbor's height: a small flat neighborhood, per the design doc."""
+    width, height, terrain = grid["width"], grid["height"], grid["terrain"]
+    result = [False] * grid["total"]
+    for row in range(height):
+        for col in range(width):
+            index = row * width + col
+            own = _num_at(terrain, index)
+            flat = True
+            for dcol, drow in _ORTHOGONAL:
+                ocol, orow = col + dcol, row + drow
+                if not (0 <= ocol < width and 0 <= orow < height):
+                    continue
+                if _num_at(terrain, orow * width + ocol) != own:
+                    flat = False
+                    break
+            result[index] = flat
+    return result
+
+
+def _locally_high_mask(grid):
+    """True where a tile sits STRICTLY above the average height of its
+    in-bounds orthogonal neighbors: a local rise, for turbine siting. A tile
+    with no in-bounds neighbor is never "high" (nothing to compare against);
+    a perfectly flat map has none either (every tile equals its neighbors'
+    average), so this never swallows ordinary flat land."""
+    width, height, terrain = grid["width"], grid["height"], grid["terrain"]
+    result = [False] * grid["total"]
+    for row in range(height):
+        for col in range(width):
+            index = row * width + col
+            own = _num_at(terrain, index)
+            neighbors = []
+            for dcol, drow in _ORTHOGONAL:
+                ocol, orow = col + dcol, row + drow
+                if 0 <= ocol < width and 0 <= orow < height:
+                    neighbors.append(_num_at(terrain, orow * width + ocol))
+            if neighbors:
+                result[index] = own > (sum(neighbors) / len(neighbors))
+    return result
+
+
+def _district_center_xy(map_data, state, grid):
+    """Bridge `(x, y)` of the District Center: `state.district_center` first,
+    then `map_data.district_center`, else the map's own center (mirrors
+    `planner._district_center`/`play._district_center_xy`)."""
+    dc = {}
+    if isinstance(state, dict):
+        dc = state.get("district_center") or {}
+    if not dc and isinstance(map_data, dict):
+        dc = map_data.get("district_center") or {}
+    cx = _as_int(dc.get("x"), grid["origin_x"] + grid["width"] // 2)
+    cy = _as_int(dc.get("y", dc.get("z")), grid["origin_y"] + grid["height"] // 2)
+    return cx, cy
+
+
+def _distance_at(distances, grid, xy):
+    col, row = xy[0] - grid["origin_x"], xy[1] - grid["origin_y"]
+    index = row * grid["width"] + col
+    return distances[index] if 0 <= index < len(distances) else -1
+
+
+def _built_xy(map_data, state):
+    """Bare `{(x, y)}` of every currently-BUILT cell, per a throwaway
+    `Reservation` seeded from `/map` (and `/state`, if given) -- reused by
+    `Zones.reconcile` instead of re-parsing `occupied[]` here."""
+    reservation = Reservation()
+    reservation.reconcile_from_map(map_data)
+    if state is not None:
+        reservation.reconcile_from_state(state)
+    return {
+        (x, y) for (x, y, _z), owner in reservation.cells.items() if owner == BUILT
+    }
+
+
+class Zones:
+    """Per-category tile regions: LP2's persisted "memory of where you want
+    what". Build with `assign_zones`; consult with `.zone_for`/
+    `.zone_for_spec`; call `.reconcile` each cycle to drop tiles the colony
+    has since built on. The partition -- which category owns which tile --
+    never changes after construction; only per-tile availability does."""
+
+    def __init__(self, regions, categories=None):
+        self.regions = {
+            category: set(cells) for category, cells in (regions or {}).items()
+        }
+        self._categories = (
+            categories if categories is not None else load_building_categories()
+        )
+
+    def zone_for(self, category):
+        """Region for `category`. An unrecognized/falsy category, or one
+        this module doesn't specialize (e.g. "decoration"/"logic"/"paths"/
+        "district"), falls back to the general flat-land region."""
+        if category and category in self.regions:
+            return self.regions[category]
+        return self.regions.get(GENERAL_ZONE, set())
+
+    def zone_for_spec(self, spec):
+        """`zone_for` resolved through `spec`'s building category."""
+        return self.zone_for(category_of_spec(spec, self._categories))
+
+    def reconcile(self, map_data, state=None):
+        """Refresh free-space in place: drop any tile now BUILT (per a fresh
+        `/map` snapshot, and `/state` buildings if given) from every region.
+        Does NOT re-score tiles or move them between categories -- the zone
+        ASSIGNMENT is stable; only per-tile availability changes as the
+        colony grows. Returns `self.regions`."""
+        built = _built_xy(map_data, state)
+        if built:
+            for category in self.regions:
+                self.regions[category] -= built
+        return self.regions
+
+
+def assign_zones(map_data, state=None, categories=None):
+    """Partition the reachable land around the District Center into
+    per-category regions (LP2). Computed ONCE from a `/map` (+ `/state` for
+    the DC position) snapshot -- hold the returned `Zones` across cycles and
+    call `.reconcile(...)` on it to refresh availability instead of calling
+    this again (re-running this would reshuffle which tiles belong to which
+    category as the colony's own buildings change the map's occupied[])."""
+    grid = _map_grid(map_data)
+    if grid["total"] <= 0:
+        return Zones({category: set() for category in _ALL_ZONE_CATEGORIES}, categories)
+
+    reachable_land = _reachable_land_mask(grid)
+    water_edge = _and_masks(spatial.deep_clean_water_edges(map_data), reachable_land)
+    moist = _and_masks(spatial.plantable_mask(map_data), reachable_land)
+    locally_high = _and_masks(_locally_high_mask(grid), reachable_land)
+    power = _or_masks(water_edge, locally_high)
+
+    water_xy = _mask_to_xy(water_edge, grid)
+    food_xy = _mask_to_xy(moist, grid)
+    power_xy = _mask_to_xy(power, grid)
+    reachable_land_xy = _mask_to_xy(reachable_land, grid)
+
+    claimed = water_xy | food_xy | power_xy
+    land_xy = reachable_land_xy - claimed
+    flat_xy = _mask_to_xy(_flat_mask(grid), grid)
+    flat_land_xy = land_xy & flat_xy
+    ring_source = flat_land_xy if flat_land_xy else land_xy
+    leftover_xy = land_xy - ring_source
+
+    dc_x, dc_y = _district_center_xy(map_data, state, grid)
+    distances = spatial.distance_field(
+        [(dc_x - grid["origin_x"], dc_y - grid["origin_y"])],
+        grid["width"], grid["height"],
+        passable=reachable_land,
+    )
+
+    ranked = sorted(
+        ring_source, key=lambda xy: (_distance_at(distances, grid, xy), xy[1], xy[0])
+    )
+    reached = [xy for xy in ranked if _distance_at(distances, grid, xy) >= 0]
+    unreached_xy = set(ranked) - set(reached)
+
+    regions = {
+        "water": water_xy,
+        "food": set(food_xy),
+        "forestry": set(food_xy),
+        "power": power_xy,
+    }
+    ring_count = len(_LAND_RING_ORDER)
+    chunk = math.ceil(len(reached) / ring_count) if reached else 0
+    for i, category in enumerate(_LAND_RING_ORDER):
+        regions[category] = set(reached[i * chunk:(i + 1) * chunk]) if chunk else set()
+    regions[GENERAL_ZONE] = leftover_xy | unreached_xy
+
+    return Zones(regions, categories)
+
+
+# ---------------------------------------------------------------------------
 # inline tests
 # ---------------------------------------------------------------------------
 
@@ -671,6 +1045,224 @@ class TerrainHeightLookupTests(unittest.TestCase):
         self.assertEqual(lookup(11, 20), 5)
         self.assertEqual(lookup(10, 21), 6)
         self.assertIsNone(lookup(999, 999))
+
+
+# ---------------------------------------------------------------------------
+# LP2 inline tests
+# ---------------------------------------------------------------------------
+
+class LoadBuildingCategoriesTests(unittest.TestCase):
+    def test_real_data_file_loads_known_categories(self):
+        categories = load_building_categories()
+        self.assertEqual(categories.get("WaterPump"), "water")
+        self.assertEqual(categories.get("EfficientFarmHouse"), "food")
+        self.assertEqual(categories.get("Lodge"), "housing")
+
+    def test_category_of_spec_strips_faction_suffix(self):
+        self.assertEqual(category_of_spec("Lodge.Folktails"), "housing")
+
+    def test_unknown_spec_has_no_category(self):
+        self.assertIsNone(category_of_spec("TotallyUnknownSpec"))
+
+    def test_missing_file_degrades_to_empty(self):
+        categories = load_building_categories(path="/no/such/buildings.json")
+        self.assertEqual(categories, {})
+
+
+class FlatMaskTests(unittest.TestCase):
+    def test_uniform_terrain_is_all_flat(self):
+        grid = _map_grid({"width": 2, "height": 2, "terrain_height": [4, 4, 4, 4]})
+        self.assertEqual(_flat_mask(grid), [True, True, True, True])
+
+    def test_a_raised_tile_breaks_flatness_for_itself_and_its_neighbors(self):
+        # 3x3, center raised (row-major: index 4 is the center).
+        terrain = [4, 4, 4, 4, 6, 4, 4, 4, 4]
+        grid = _map_grid({"width": 3, "height": 3, "terrain_height": terrain})
+        mask = _flat_mask(grid)
+        self.assertFalse(mask[4])  # the raised tile itself
+        self.assertFalse(mask[1])  # north neighbor
+        self.assertFalse(mask[3])  # west neighbor
+        self.assertFalse(mask[5])  # east neighbor
+        self.assertFalse(mask[7])  # south neighbor
+        self.assertTrue(mask[0])   # corner: not orthogonally adjacent to center
+
+
+class LocallyHighMaskTests(unittest.TestCase):
+    def test_flat_map_has_no_locally_high_tiles(self):
+        grid = _map_grid({"width": 3, "height": 3, "terrain_height": [4] * 9})
+        self.assertEqual(_locally_high_mask(grid), [False] * 9)
+
+    def test_bump_is_locally_high_its_flat_neighbors_are_not(self):
+        terrain = [4, 4, 4, 4, 6, 4, 4, 4, 4]  # 3x3, center bumped up
+        grid = _map_grid({"width": 3, "height": 3, "terrain_height": terrain})
+        mask = _locally_high_mask(grid)
+        self.assertEqual([i for i, v in enumerate(mask) if v], [4])
+
+
+def _zone_test_map(width=8, height=6, origin=(0, 0), extra_occupied=()):
+    """A small synthetic `/map` fixture for LP2 zone tests: a locally-high
+    bump at (0, 0), a 2-tile-wide clean water body along the east edge
+    (cols 6-7, all rows), moist farmland along the south edge (row 5, cols
+    0-3), and the District Center at (2, 2). `extra_occupied` marks
+    additional bridge `(x, y)` tiles as occupied (for reconcile tests)."""
+    total = width * height
+    origin_x, origin_y = origin
+    terrain = [4] * total
+    terrain[0] = 6  # locally-high bump, north/west of the map
+    water = [0] * total
+    for row in range(height):
+        for col in (6, 7):
+            water[row * width + col] = 3
+    moist = [0] * total
+    for col in range(4):
+        moist[5 * width + col] = 1
+    occupied = [0] * total
+    occupied[2 * width + 2] = 1  # District Center footprint
+    for x, y in extra_occupied:
+        occupied[(y - origin_y) * width + (x - origin_x)] = 1
+    return {
+        "origin": {"x": origin_x, "z": origin_y},
+        "width": width,
+        "height": height,
+        "terrain_height": terrain,
+        "water_depth": water,
+        "contamination": [0] * total,
+        "moist": moist,
+        "occupied": occupied,
+        "reachable": [1] * total,
+        "on_road": [0] * total,
+        "district_center": {"x": origin_x + 2, "y": origin_y + 2},
+    }
+
+
+class ZoneAssignmentTests(unittest.TestCase):
+    WIDTH, HEIGHT = 8, 6
+
+    def setUp(self):
+        self.map_data = _zone_test_map(self.WIDTH, self.HEIGHT)
+        self.zones = assign_zones(self.map_data)
+
+    def _index(self, x, y):
+        return y * self.WIDTH + x
+
+    def _water_depth(self, x, y):
+        if not (0 <= x < self.WIDTH and 0 <= y < self.HEIGHT):
+            return 0
+        return self.map_data["water_depth"][self._index(x, y)]
+
+    def _moist(self, x, y):
+        return bool(self.map_data["moist"][self._index(x, y)])
+
+    def _occupied(self, x, y):
+        return bool(self.map_data["occupied"][self._index(x, y)])
+
+    def _flat(self, x, y):
+        own = self.map_data["terrain_height"][self._index(x, y)]
+        for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.WIDTH and 0 <= ny < self.HEIGHT:
+                if self.map_data["terrain_height"][self._index(nx, ny)] != own:
+                    return False
+        return True
+
+    @staticmethod
+    def _dist(xy, dc):
+        return abs(xy[0] - dc[0]) + abs(xy[1] - dc[1])
+
+    def test_water_zone_tiles_are_adjacent_to_clean_water(self):
+        water_tiles = self.zones.zone_for("water")
+        self.assertTrue(water_tiles)
+        for x, y in water_tiles:
+            neighbors = ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+            self.assertTrue(
+                any(self._water_depth(nx, ny) > 0 for nx, ny in neighbors),
+                "%r not adjacent to water" % ((x, y),),
+            )
+
+    def test_food_and_forestry_zones_are_all_moist(self):
+        for category in ("food", "forestry"):
+            tiles = self.zones.zone_for(category)
+            self.assertTrue(tiles, category)
+            for x, y in tiles:
+                self.assertTrue(self._moist(x, y), "%r not moist" % ((x, y),))
+
+    def test_power_zone_includes_water_edge_and_locally_high_tiles(self):
+        power = self.zones.zone_for("power")
+        water = self.zones.zone_for("water")
+        self.assertTrue(water.issubset(power))
+        self.assertIn((0, 0), power)          # the locally-high bump
+        self.assertNotIn((0, 0), water)       # not itself adjacent to water
+
+    def test_housing_zone_is_flat_reachable_and_not_on_water(self):
+        housing = self.zones.zone_for("housing")
+        industry = self.zones.zone_for("industry")
+        water_tiles = self.zones.zone_for("water")
+        self.assertTrue(housing)
+        self.assertTrue(industry)
+        for x, y in housing:
+            self.assertLessEqual(self._water_depth(x, y), 0)
+            self.assertNotIn((x, y), water_tiles)
+            self.assertTrue(self._flat(x, y), "%r not flat" % ((x, y),))
+            self.assertFalse(self._occupied(x, y))
+        # Ring order: housing sits no farther from the DC than industry.
+        dc = (2, 2)
+        self.assertLessEqual(
+            max(self._dist(t, dc) for t in housing),
+            min(self._dist(t, dc) for t in industry),
+        )
+
+    def test_regions_are_subsets_of_reachable_land(self):
+        reachable_land = {
+            (x, y)
+            for y in range(self.HEIGHT)
+            for x in range(self.WIDTH)
+            if self._water_depth(x, y) <= 0 and not self._occupied(x, y)
+        }
+        for category, tiles in self.zones.regions.items():
+            self.assertTrue(
+                tiles <= reachable_land,
+                "%s has tiles outside reachable land: %r"
+                % (category, tiles - reachable_land),
+            )
+
+    def test_zone_for_spec_resolves_via_category(self):
+        self.assertEqual(self.zones.zone_for_spec("WaterPump"), self.zones.zone_for("water"))
+        self.assertEqual(
+            self.zones.zone_for_spec("EfficientFarmHouse"), self.zones.zone_for("food")
+        )
+        self.assertEqual(self.zones.zone_for_spec("Lodge"), self.zones.zone_for("housing"))
+
+    def test_zone_for_unknown_category_falls_back_to_general(self):
+        self.assertEqual(self.zones.zone_for("nonsense"), self.zones.zone_for(GENERAL_ZONE))
+        self.assertEqual(self.zones.zone_for(None), self.zones.zone_for(GENERAL_ZONE))
+
+    def test_reconcile_drops_a_tile_that_becomes_occupied(self):
+        housing = self.zones.zone_for("housing")
+        tile = next(iter(housing))
+        occupied_map = _zone_test_map(self.WIDTH, self.HEIGHT, extra_occupied=[tile])
+
+        result = self.zones.reconcile(occupied_map)
+
+        self.assertIs(result, self.zones.regions)
+        for tiles in self.zones.regions.values():
+            self.assertNotIn(tile, tiles)
+
+    def test_reconcile_does_not_reassign_categories(self):
+        before = {category: set(tiles) for category, tiles in self.zones.regions.items()}
+        self.zones.reconcile(self.map_data)  # nothing new occupied
+        after = self.zones.regions
+        self.assertEqual(before, after)
+
+
+class AssignZonesDegenerateInputTests(unittest.TestCase):
+    def test_empty_map_returns_empty_zones_for_every_category(self):
+        zones = assign_zones({})
+        for category in _ALL_ZONE_CATEGORIES:
+            self.assertEqual(zones.zone_for(category), set())
+
+    def test_non_dict_map_does_not_raise(self):
+        zones = assign_zones(None)
+        self.assertEqual(zones.zone_for("water"), set())
 
 
 if __name__ == "__main__":
