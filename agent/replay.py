@@ -5,12 +5,19 @@ capturing just enough of the bridge `/state` payload to reconstruct the colony's
 economic trajectory (population, water/food buffer days, log/plank stock, building
 counts) alongside whatever action the controller/LLM chose that step.
 
-After a run ends, `summarize_run` classifies how it ended (survived / died of
-thirst / died of hunger / stalled with no progress) and `credit_assignment` looks
-back over the steps leading up to a bad ending and proposes what should have been
-built instead (e.g. "you let water hit zero for 3 steps with no WaterPump -> you
-should have built one"). This is the run-to-run learning signal: future runs can
-consult past regret windows instead of repeating the same mistake.
+After a run ends (or mid-run, via `progress_signal` on the rows recorded so far),
+`summarize_run`/`classify_stall` classify how it ended (survived / died of thirst /
+died of hunger / stalled with no progress) and, for a bad ending, WHY it's worth a
+relabel or not: `classify_stall` distinguishes RESOURCE_STARVED/POLICY_GAP (the
+colony died, or the real deterministic expert still saw a move the policy missed -
+correctable) from STRUCTURAL_GAP (the expert also had nothing to propose - no
+correct label exists). `credit_assignment` then looks back over the steps leading
+up to a correctable bad ending and proposes what should have been done instead,
+preferring the expert's own simultaneous opinion (`meta.expert_top`, true DAgger)
+over the older hand-written heuristic (e.g. "you let water hit zero for 3 steps
+with no WaterPump -> you should have built one"). This is the run-to-run learning
+signal: future runs can consult past regret windows instead of repeating the same
+mistake. See docs/kb/learning-loop-design.md for the full design.
 
 Python 3 standard library only - no third-party packages, no network calls.
 Runs its own tests: `python3 agent/replay.py`.
@@ -22,6 +29,7 @@ import json
 import os
 import unittest
 import uuid
+from collections import Counter
 
 # `agent/` has no __init__.py, and this module is designed to run standalone
 # (`python3 agent/replay.py`) as well as via package-qualified imports, so try the
@@ -148,6 +156,33 @@ def _action_id(action):
     return None
 
 
+def _meta_expert_top(row):
+    """row["meta"]["expert_top"] if row.meta is a dict, else None. play_policy.py's
+    record_step calls always carry this (the schema-id the deterministic expert -
+    controller.build_safe_ready_frontier - would pick this exact cycle); older/
+    synthetic rows without a meta dict at all just read as None here, same as a
+    row whose meta explicitly has no expert_top key."""
+    meta = row.get("meta")
+    return meta.get("expert_top") if isinstance(meta, dict) else None
+
+
+def _failed_action_id(row):
+    """For a row recorded with meta.executed is False, the goal_id worth blaming:
+    meta.policy_top (what the policy actually ranked top and tried, before falling
+    through to advance_time - see play_policy._execute_intent's contract, where
+    executed=False always means the recorded row["action"] itself is "advance_time",
+    so that field alone can't tell two different failed goals apart) if present,
+    else row["action"]/_action_id as a fallback for rows recorded without
+    policy_top. None for a row that isn't an executed=False row at all."""
+    meta = row.get("meta")
+    if not (isinstance(meta, dict) and meta.get("executed") is False):
+        return None
+    policy_top = meta.get("policy_top")
+    if isinstance(policy_top, str) and policy_top:
+        return policy_top
+    return _action_id(row.get("action"))
+
+
 def _run_path(run_id):
     return os.path.join(_RUNS_DIR, "%s.jsonl" % run_id)
 
@@ -205,12 +240,27 @@ def load_run(run_id):
     return rows
 
 
-def _scan(rows):
-    """Single pass over a run's rows shared by summarize_run and credit_assignment.
+def progress_signal(rows, state_ctx=None):
+    """Single pass over a run's rows - or a PREFIX of them - classifying how the
+    run has gone SO FAR: the running peak/final/min stats plus, if it already
+    ended badly, the classification and the row-index where that classification
+    first became true (the "trigger" the lookback window in credit_assignment/
+    classify_stall anchors on).
 
-    Returns the running peak/final/min stats plus, if the run ended badly, the
-    classification and the row-index where that classification first became true
-    (the "trigger" the lookback window in credit_assignment anchors on)."""
+    This is the same logic summarize_run/credit_assignment/classify_stall already
+    relied on via `_scan` (which is now a thin alias for this function - see
+    below), extracted so it is also incrementally callable: play_policy.run's
+    in-run stall check calls this every cycle with the rows recorded so far, and
+    gets the identical classification summarize_run would compute post-hoc on the
+    finished file, without duplicating the _STALL_STREAK/_DEATH_STREAK thresholds.
+
+    `state_ctx` is currently unused - reserved for a future caller that wants to
+    thread incremental streak state across calls instead of rescanning `rows`
+    from scratch every cycle. Not needed yet: this is O(len(rows)) per call, and
+    _STALL_STREAK=8/_DEATH_STREAK=3 mean the classification-relevant streaks
+    resolve within single-digit rows of whatever prefix is passed in, so an
+    in-run caller re-scanning the (short, bounded-by-when-it-stops) rows-so-far
+    list every cycle is cheap in practice."""
     result = {
         "days_survived": 0,
         "peak_pop": 0,
@@ -291,6 +341,15 @@ def _scan(rows):
     return result
 
 
+def _scan(rows):
+    """Thin alias kept for the existing internal call sites (summarize_run,
+    classify_stall) - the streak-tracking body now lives in progress_signal so it
+    is also callable incrementally (see its docstring). Behavior-preserving: same
+    function, same result, just extracted under a name that reflects it also
+    being usable on a run-in-progress, not only a finished one."""
+    return progress_signal(rows)
+
+
 def summarize_run(run_id):
     """{days_survived, peak_pop, final_pop, ended, death_cause, min_water_days,
     min_food_days, reached_pump, reached_30_pop} for the whole run."""
@@ -325,20 +384,108 @@ def _stall_better_action(building_counts):
     return None
 
 
-def credit_assignment(run_id, lookback=6):
-    """For a run that ended badly, the `lookback` steps leading up to the failure,
-    each annotated with the action that should have been chosen instead. Empty list
-    for a run that ended 'alive' (nothing to blame)."""
+# ---------------------------------------------------------------------------
+# failure classification (docs/kb/learning-loop-design.md SS4/SS5.2)
+# ---------------------------------------------------------------------------
+#
+# RESOURCE_STARVED / POLICY_GAP -> credit_assignment has a correction to offer
+# (relabel-able). STRUCTURAL_GAP -> the real deterministic expert also had
+# nothing to propose, so no correct label exists; credit_assignment returns []
+# and run_loop.py routes these to a playbook lesson instead of a relabel.
+RESOURCE_STARVED = "resource_starved"
+POLICY_GAP = "policy_gap"
+STRUCTURAL_GAP = "structural_gap"
+
+
+def classify_stall(run_id, lookback=6):
+    """For a run that has already ended badly, {class, window, repeated_action,
+    expert_had_option, ended} - the routing signal run_loop.py uses in place of
+    the old binary failed-or-regressed gate. None if the run is still 'alive'
+    (nothing to classify yet).
+
+    `class` is one of RESOURCE_STARVED / POLICY_GAP / STRUCTURAL_GAP:
+
+      * RESOURCE_STARVED - the colony actually died (thirst/hunger). Checked
+        first, unconditionally on expert telemetry: a resource death is always
+        worth a relabel attempt regardless of what the expert's opinion was.
+      * POLICY_GAP - not a resource death, and at least one window row's
+        meta.expert_top is a concrete game_schema goal other than "advance_time":
+        the real expert (controller.build_safe_ready_frontier, as recorded live
+        by play_policy.run every cycle) saw a move here that the policy didn't
+        take. This is true DAgger territory - query the expert on the state the
+        learner itself visited.
+      * STRUCTURAL_GAP - not a resource death, and every window row whose
+        meta.expert_top was actually RECORDED says "advance_time": the expert
+        itself had nothing to propose either. No correct label exists.
+        NOTE (deliberate refinement over a literal "not policy_gap => structural
+        gap" reading): a window with NO expert_top telemetry recorded at all
+        (every row's meta is missing/None, or lacks an "expert_top" key - i.e. a
+        run predating play_policy passing meta={"expert_top": ...}, which is
+        every existing replay.py/learn.py fixture) is routed to POLICY_GAP, not
+        STRUCTURAL_GAP. Absence of evidence isn't evidence the expert also had
+        nothing - only a *recorded* "advance_time" proves that. This is what
+        keeps every pre-DAgger-telemetry run going through credit_assignment's
+        heuristic fallback unchanged, instead of newly returning [] for runs
+        that used to get a (heuristic) correction.
+
+    `repeated_action` (the REPEATED_FAILED_ACTION auxiliary signal) is the
+    dominant goal_id behind this window's executed=False rows - see
+    _failed_action_id - when it accounts for at least len(window)-1 of them,
+    else None. Feeds gap_lesson_from_diagnosis's playbook trigger tag.
+    """
     rows = load_run(run_id)
     scan = _scan(rows)
-    ended = scan["ended"]
-    trigger_index = scan["trigger_index"]
-    if ended == "alive" or trigger_index is None:
-        return []
+    if scan["ended"] == "alive" or scan["trigger_index"] is None:
+        return None
 
-    start = max(0, trigger_index - lookback + 1)
-    window_rows = rows[start:trigger_index + 1]
+    start = max(0, scan["trigger_index"] - lookback + 1)
+    window = rows[start:scan["trigger_index"] + 1]
 
+    expert_tops = [_meta_expert_top(r) for r in window]
+    expert_had_option = any(et not in (None, "advance_time") for et in expert_tops)
+    has_expert_telemetry = any(
+        isinstance(r.get("meta"), dict) and "expert_top" in r["meta"] for r in window
+    )
+
+    failed_actions = [fa for fa in (_failed_action_id(r) for r in window) if fa is not None]
+    repeated = None
+    if failed_actions:
+        top, count = Counter(failed_actions).most_common(1)[0]
+        if count >= max(1, len(window) - 1):
+            repeated = top
+
+    if scan["ended"] in ("dead_thirst", "dead_hunger"):
+        cls = RESOURCE_STARVED
+    elif expert_had_option:
+        cls = POLICY_GAP
+    elif has_expert_telemetry:
+        cls = STRUCTURAL_GAP
+    else:
+        cls = POLICY_GAP  # no expert telemetry recorded at all - see NOTE above
+
+    return {
+        "class": cls,
+        "window": window,
+        "repeated_action": repeated,
+        "expert_had_option": expert_had_option,
+        "ended": scan["ended"],
+    }
+
+
+def _legacy_better_action(diagnosis, row=None):
+    """The pre-DAgger heuristic (thirst/hunger producer checks, `_stall_better_
+    action`), kept verbatim - just re-sourced from a classify_stall diagnosis
+    dict (diagnosis["ended"]/diagnosis["window"]) instead of re-scanning the run
+    itself. Returns (better_action, reason).
+
+    `row` is accepted only for call-site symmetry with credit_assignment's
+    per-row DAgger-or-fallback decision; it's unused here because this heuristic
+    has always looked at the whole window (or its last row), never per-row -
+    every row in a window got the exact same correction before this refactor
+    too, so computing it once per window (not once per row) is behavior-
+    preserving, not a simplification."""
+    ended = diagnosis["ended"]
+    window_rows = diagnosis["window"]
     if ended == "dead_thirst":
         pump_in_window = any(
             _has_building(r.get("building_counts") or {}, _SPEC_WATER_PUMP) for r in window_rows
@@ -378,9 +525,44 @@ def credit_assignment(run_id, lookback=6):
                 "WaterPump/GathererFlag/LumberjackFlag all present, cause unclear"
             )
         )
+    return better_action, reason
+
+
+def credit_assignment(run_id, lookback=6):
+    """For a run that ended badly, the `lookback` steps leading up to the failure,
+    each annotated with the action that should have been chosen instead.
+
+    Delegates classification to classify_stall. Empty list when there's nothing
+    to blame: the run is still 'alive', or its class is STRUCTURAL_GAP (the real
+    expert also proposed nothing at every one of these states - no correct label
+    exists to clone toward, see docs/kb/learning-loop-design.md SS2/SS5.2).
+
+    RESOURCE_STARVED/POLICY_GAP windows get a per-row correction: prefer the
+    real expert's simultaneous opinion (that row's meta.expert_top) when it is a
+    concrete game_schema goal other than "advance_time" - true DAgger, querying
+    the expert on the exact state the learner itself visited - else fall back to
+    the pre-DAgger heuristic (_legacy_better_action). A run recorded before
+    meta.expert_top existed (every pre-existing replay.py/learn.py fixture) has
+    no expert_top on any row, so every one of its entries takes the fallback
+    path - unchanged from this function's behavior before classify_stall existed.
+    """
+    diagnosis = classify_stall(run_id, lookback=lookback)
+    if diagnosis is None or diagnosis["class"] == STRUCTURAL_GAP:
+        return []
+
+    legacy_action, legacy_reason = _legacy_better_action(diagnosis)
 
     entries = []
-    for row in window_rows:
+    for row in diagnosis["window"]:
+        expert_top = _meta_expert_top(row)
+        if expert_top not in (None, "advance_time"):
+            better_action = expert_top
+            reason = (
+                "DAgger: the expert planner proposed %r at this exact state; the "
+                "policy diverged from a still-capable expert" % (expert_top,)
+            )
+        else:
+            better_action, reason = legacy_action, legacy_reason
         entries.append({
             "step": row.get("step"),
             "state_snapshot": {key: row.get(key) for key in _SNAPSHOT_FIELDS},
@@ -712,6 +894,147 @@ class ReplayTests(unittest.TestCase):
         for entry in entries:
             self.assertIsNone(entry["better_action"])
             self.assertIn("all present", entry["reason"])
+
+    # -- progress_signal / _scan parity (behavior-preserving refactor) --------
+
+    def test_progress_signal_matches_scan_on_fixture_traces(self):
+        for label, steps in (
+            ("thirst", self._THIRST_DEATH_STEPS),
+            ("survivor", self._SURVIVOR_STEPS),
+        ):
+            run_id = self._new_run_id("parity_%s" % label)
+            self._write_trace(run_id, steps)
+            rows = load_run(run_id)
+            self.assertEqual(progress_signal(rows), _scan(rows))
+
+    def test_progress_signal_matches_scan_on_every_growing_prefix(self):
+        # play_policy.py's in-run caller calls this every cycle on a GROWING
+        # prefix of the run-so-far, not just the whole finished run - prove
+        # parity holds at every prefix length, not only the final one.
+        run_id = self._new_run_id("parity_prefixes")
+        self._write_trace(run_id, self._THIRST_DEATH_STEPS)
+        rows = load_run(run_id)
+        for n in range(1, len(rows) + 1):
+            prefix = rows[:n]
+            self.assertEqual(progress_signal(prefix), _scan(prefix))
+
+    # -- classify_stall / DAgger credit_assignment ----------------------------
+    #
+    # docs/kb/learning-loop-design.md SS4/SS5.2: RESOURCE_STARVED/POLICY_GAP are
+    # relabel-able (credit_assignment has a correction); STRUCTURAL_GAP means the
+    # real expert also proposed nothing, so credit_assignment must return [].
+
+    def _write_meta_trace(self, run_id, steps):
+        """Like _write_trace but each step is (state_kwargs, action, meta)."""
+        for i, (state_kwargs, action, meta) in enumerate(steps, start=1):
+            record_step(run_id, i, self._state(**state_kwargs), action, meta=meta)
+
+    def test_classify_stall_resource_starved_for_thirst_death(self):
+        run_id = self._build_thirst_run()
+
+        diagnosis = classify_stall(run_id, lookback=6)
+
+        self.assertIsNotNone(diagnosis)
+        self.assertEqual(diagnosis["class"], RESOURCE_STARVED)
+        self.assertEqual(diagnosis["ended"], "dead_thirst")
+        self.assertEqual(len(diagnosis["window"]), 6)
+
+    def test_classify_stall_returns_none_for_a_living_run(self):
+        run_id = self._build_survivor_run()
+        self.assertIsNone(classify_stall(run_id))
+
+    def test_classify_stall_policy_gap_when_expert_still_sees_a_concrete_goal(self):
+        # A stall where the REAL expert (meta.expert_top, as play_policy.run
+        # records it every cycle) still proposes a concrete goal throughout the
+        # window - the policy diverged from a still-capable expert, classic
+        # DAgger territory, not a dead end.
+        run_id = self._new_run_id("policy_gap")
+        counts = {"DistrictCenter.Folktails": 1, "LumberjackFlag.Folktails": 1}
+        steps = [
+            (dict(day=1, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                  log=5, plank=0, counts=counts), "build_lumberjack_flag", None),
+        ]
+        for i in range(8):
+            steps.append((
+                dict(day=1 + i, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                     log=5, plank=0, counts=counts), "advance_time",
+                {"expert_top": "build_lumber_mill", "executed": False},
+            ))
+        self._write_meta_trace(run_id, steps)
+
+        summary = summarize_run(run_id)
+        self.assertEqual(summary["ended"], "stalled")
+
+        diagnosis = classify_stall(run_id, lookback=6)
+        self.assertEqual(diagnosis["class"], POLICY_GAP)
+        self.assertTrue(diagnosis["expert_had_option"])
+
+        entries = credit_assignment(run_id, lookback=6)
+        self.assertEqual(len(entries), 6)
+        for entry in entries:
+            self.assertEqual(entry["better_action"], "build_lumber_mill")
+            self.assertIn("DAgger", entry["reason"])
+
+    def test_classify_stall_structural_gap_when_expert_also_advances_time(self):
+        # Same shape stall, but the expert's OWN telemetry says advance_time at
+        # every window row - the real planner also had nothing to propose. No
+        # correct label exists; credit_assignment must not fabricate one.
+        run_id = self._new_run_id("structural_gap")
+        counts = {
+            "DistrictCenter.Folktails": 1,
+            "WaterPump.Folktails": 1,
+            "GathererFlag.Folktails": 1,
+            "LumberjackFlag.Folktails": 1,
+        }
+        steps = [
+            (dict(day=1, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                  log=5, plank=0, counts=counts), "build_lumberjack_flag", None),
+        ]
+        for i in range(8):
+            steps.append((
+                dict(day=1 + i, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                     log=5, plank=0, counts=counts), "advance_time",
+                {"expert_top": "advance_time", "executed": False, "policy_top": "build_dam"},
+            ))
+        self._write_meta_trace(run_id, steps)
+
+        diagnosis = classify_stall(run_id, lookback=6)
+        self.assertEqual(diagnosis["class"], STRUCTURAL_GAP)
+        self.assertFalse(diagnosis["expert_had_option"])
+        # REPEATED_FAILED_ACTION auxiliary signal: the goal the policy actually
+        # kept wanting (meta.policy_top), not the recorded "advance_time" action
+        # every executed=False row shares regardless of which goal was tried.
+        self.assertEqual(diagnosis["repeated_action"], "build_dam")
+
+        self.assertEqual(credit_assignment(run_id, lookback=6), [])
+
+    def test_classify_stall_legacy_run_without_expert_telemetry_falls_back_to_policy_gap(self):
+        # A run recorded with NO meta at all (every existing replay.py/learn.py
+        # fixture, and every run predating meta.expert_top) must NOT be
+        # classified STRUCTURAL_GAP - there is no evidence the expert also had
+        # nothing, only absence of evidence. It routes through POLICY_GAP so
+        # credit_assignment still applies the pre-DAgger heuristic fallback.
+        run_id = self._new_run_id("no_telemetry")
+        counts = {"DistrictCenter.Folktails": 1, "LumberjackFlag.Folktails": 1}
+        steps = [
+            (dict(day=1, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                  log=5, plank=0, counts=counts), "build_lumberjack_flag"),
+        ]
+        for i in range(8):
+            steps.append(
+                (dict(day=1 + i, hour=8, pop=5, homeless=5, water_days=5.0, food_days=5.0,
+                      log=5, plank=0, counts=counts), "advance_time")
+            )
+        self._write_trace(run_id, steps)
+
+        diagnosis = classify_stall(run_id, lookback=6)
+        self.assertEqual(diagnosis["class"], POLICY_GAP)
+        self.assertFalse(diagnosis["expert_had_option"])
+
+        entries = credit_assignment(run_id, lookback=6)
+        self.assertEqual(len(entries), 6)
+        for entry in entries:
+            self.assertEqual(entry["better_action"], GOAL_WATER_PUMP)
 
 
 if __name__ == "__main__":

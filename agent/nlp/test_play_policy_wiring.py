@@ -129,6 +129,19 @@ class _FixedPolicyLoader:
         return _FixedPolicy(cls.ranked)
 
 
+class _AdvanceOnlyPolicyLoader:
+    """A policy that only ever ranks advance_time - _execute_intent then has
+    nothing else to try and always reports executed=False (see _execute_intent:
+    the "advance_time" entry is remembered and returned only once the loop runs
+    out of other ranked intents to attempt)."""
+
+    ranked = [("advance_time", 0.5)]
+
+    @classmethod
+    def load(cls):
+        return _FixedPolicy(cls.ranked)
+
+
 class PlayPolicyWiringTests(unittest.TestCase):
     def setUp(self):
         FakeBridge.instances = []
@@ -310,6 +323,80 @@ class PlayPolicyWiringTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["action"], "goal_reached")
         self.assertEqual(rows[0]["meta"]["phase"], curriculum.current_phase(_stable_state()))
+
+
+class InRunStallDetectionTests(unittest.TestCase):
+    """docs/kb/learning-loop-design.md SS5.1: run() must end itself within a few
+    cycles of a stall/death streak starting, instead of grinding to max_cycles."""
+
+    def setUp(self):
+        FakeBridge.instances = []
+        FakeBridge.state_data = None
+        FakeBridge.map_data = None
+        FakeBridge.resources_data = None
+        self._run_ids = []
+
+    def tearDown(self):
+        for run_id in self._run_ids:
+            journal_path = _JOURNAL_DIR / ("%s.jsonl" % run_id)
+            run_path = _RUNS_DIR / ("%s.jsonl" % run_id)
+            if journal_path.exists():
+                journal_path.unlink()
+            if run_path.exists():
+                run_path.unlink()
+
+    def _run_id(self, tag: str) -> str:
+        run_id = "test_play_policy_wiring_%s_%s" % (tag, uuid.uuid4().hex[:8])
+        self._run_ids.append(run_id)
+        return run_id
+
+    def _frozen_stall_state(self) -> dict:
+        """state_fresh.json with comfortable, UNCHANGING water/food buffers (so
+        only the stall path - not a thirst/hunger death - can trip) and a
+        FakeBridge that returns this exact snapshot every cycle, so log_stored/
+        building_counts genuinely never change: the "no progress" condition
+        _scan/progress_signal look for."""
+        state = copy.deepcopy(_load_fixture("state_fresh.json"))
+        for item in state["resources"]:
+            if item.get("good") == "Water":
+                item["days_remaining"] = 10.0
+                item["stored"] = 100
+        state["resources"].append({
+            "good": "Berries", "stored": 100, "days_remaining": 10.0,
+            "all_stock": 100, "capacity": 100, "fill_rate": 0,
+        })
+        return state
+
+    def test_run_breaks_early_on_in_run_stall_instead_of_grinding_to_max_cycles(self):
+        FakeBridge.state_data = self._frozen_stall_state()
+        FakeBridge.map_data = _load_fixture("map_fresh.json")
+        FakeBridge.resources_data = _load_fixture("resources_fresh.json")
+
+        run_id = self._run_id("stall_early_stop")
+        with mock.patch.object(play, "Bridge", FakeBridge), \
+             mock.patch.object(play_policy, "DecisionPolicy", _AdvanceOnlyPolicyLoader), \
+             mock.patch.object(play_policy.controller, "bulk_advance_until_wake") as bulk_mock:
+            summary = play_policy.run({"BRIDGE_URL": "http://test"}, run_id, max_cycles=15)
+
+        # Every cycle ranks advance_time only, against a perfectly frozen state
+        # (log_stored/building_counts never change) -> replay's stall streak
+        # (_STALL_STREAK=8, one warmup row before the streak can start counting)
+        # trips exactly at the 9th recorded row. The in-run check must end the
+        # run THEN, not grind through the remaining 6 of the 15 requested cycles.
+        rows = replay.load_run(run_id)
+        self.assertEqual(len(rows), 9)
+        self.assertEqual(summary["cycles"], 9)
+        # bulk_advance_until_wake still ran for the 8 cycles before the stall was
+        # detected (executed=False every time) but never for a 9th/10th/... -
+        # proof the loop actually broke instead of merely coincidentally ending.
+        self.assertEqual(bulk_mock.call_count, 8)
+
+        journal_events = _read_jsonl(_JOURNAL_DIR / ("%s.jsonl" % run_id))
+        stall_events = [e for e in journal_events if e.get("event") == "stall_detected"]
+        self.assertEqual(len(stall_events), 1)
+        self.assertEqual(stall_events[0]["cycle"], 9)
+        self.assertEqual(stall_events[0]["ended"], "stalled")
+        self.assertEqual(stall_events[0]["death_cause"], "stall")
 
 
 if __name__ == "__main__":

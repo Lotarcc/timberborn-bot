@@ -19,6 +19,13 @@ Pipeline (see agent/run_loop.py, Task 7b):
     corrections into agent/data/decision_dataset.json -> retrain_command() gives
     the shell sequence to re-run train_cart.py/train_lidsnet.py against it.
 
+Not every bad run is relabel-able: replay.classify_stall's STRUCTURAL_GAP class
+means the real deterministic expert also had no move, so credit_assignment
+returns [] and there is nothing here to fold into the dataset.
+gap_lesson_from_diagnosis is the OTHER response for that class - it turns the
+diagnosis into a coach.py-shaped playbook lesson instead (see
+docs/kb/learning-loop-design.md SS5.5; run_loop.py routes to one or the other).
+
 Run:  .venv/bin/python -m unittest agent.nlp.test_learn -v
 """
 
@@ -168,6 +175,47 @@ def build_augmented_dataset(
     }
 
 
+def gap_lesson_from_diagnosis(diagnosis: dict, run_id: str) -> dict:
+    """Turn a replay.classify_stall STRUCTURAL_GAP diagnosis into a coach.py-shaped
+    lesson (docs/kb/learning-loop-design.md SS5.5): a run whose class is
+    STRUCTURAL_GAP has no correct label for build_augmented_dataset to clone
+    toward (the real deterministic expert also proposed nothing at every window
+    row), so instead of a relabel this feeds coach.update_playbook -> reusing the
+    existing, tested reconcile/confidence/prune machinery instead of a new store.
+
+    The returned dict matches every lesson coach.analyze already produces
+    (trigger/situation/action/outcome/evidence/confidence/created_run/
+    last_seen_run), keyed by `trigger="structural_gap:<tag>"` where <tag> is
+    classify_stall's `repeated_action` (the goal_id the policy kept trying and
+    failing at) when known, else "unknown" - coach.reconcile dedups/accumulates
+    evidence by (trigger, action), so repeated runs hitting the SAME structural
+    gap accumulate evidence.runs instead of producing separate lessons.
+    """
+    tag = diagnosis.get("repeated_action") or "unknown"
+    window = diagnosis.get("window") or []
+    last_row = window[-1] if window else {}
+    last_meta = last_row.get("meta") if isinstance(last_row.get("meta"), dict) else {}
+    phase = last_meta.get("phase")
+    ended = diagnosis.get("ended")
+    return {
+        "trigger": "structural_gap:%s" % tag,
+        "situation": "phase=%s ended=%s expert_had_option=False" % (phase, ended),
+        "action": (
+            "extend planner.py/game_schema.py (or the bridge) so %s has a real "
+            "candidate; see docs/kb/placement-verticality-gaps.md for the known "
+            "verticality/water-infra gaps" % tag
+        ),
+        "outcome": (
+            "unblocks colonies that stall with the real expert also proposing "
+            "advance_time - relabeling cannot fix this class"
+        ),
+        "evidence": {"runs": 1, "wins": 0, "losses": 1},
+        "confidence": 0.5,
+        "created_run": run_id,
+        "last_seen_run": run_id,
+    }
+
+
 def retrain_command(host: Optional[str] = None) -> str:
     """The shell command sequence to retrain both decision heads after
     build_augmented_dataset has written a new decision_dataset.json. Returns a
@@ -186,5 +234,5 @@ def retrain_command(host: Optional[str] = None) -> str:
 
 __all__ = [
     "examples_from_run", "build_augmented_dataset", "retrain_command",
-    "CORRECTION_WEIGHT", "CORRECTION_SOURCE",
+    "gap_lesson_from_diagnosis", "CORRECTION_WEIGHT", "CORRECTION_SOURCE",
 ]

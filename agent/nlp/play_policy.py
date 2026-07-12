@@ -170,6 +170,11 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
     total = 0
     last_work_hours = None
     actions_set = set(game_schema.actions())
+    # In-memory mirror of this run's recorded rows (docs/kb/learning-loop-design.md
+    # SS5.1): the in-run stall check below needs exactly what replay.load_run(run_id)
+    # would return, but re-reading the jsonl file from disk every cycle is wasted
+    # work when record_step already hands back each row as it's written.
+    run_rows: List[dict] = []
     for cycle in range(1, max_cycles + 1):
         try:
             state, map_data, resources, _, _ = controller._read_cycle_inputs(bridge, cycle)
@@ -249,17 +254,33 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
             "logs": planner._logs_available(state),
             "water_days": round(planner._resource_days(state, "Water"), 1),
         })
-        replay.record_step(run_id, cycle, state, intent, meta={
+        record = replay.record_step(run_id, cycle, state, intent, meta={
             "phase": curriculum.current_phase(state),
             "confidence": round(float(conf), 3),
             "expert_top": expert_top,
             "policy_top": policy_top,
             "executed": executed,
         })
+        run_rows.append(record)
         play.log_stderr("cycle %02d | policy=%s(%.2f) expert=%s %s | %s" % (
             cycle, policy_top, conf, expert_top,
             "OK" if policy_top == expert_top else "DIFF",
             "did " + intent if executed else "advance"))
+
+        # In-run stall stop (docs/kb/learning-loop-design.md SS5.1): reuse the SAME
+        # streak logic summarize_run applies post-hoc, but incrementally, on the
+        # rows recorded so far - so a colony that's alive-but-stuck (or already
+        # dying) ends the run within ~_STALL_STREAK/_DEATH_STREAK cycles of the
+        # streak actually starting, instead of grinding through the rest of
+        # max_cycles' bulk_advance_until_wake calls on an already-decided run.
+        sig = replay.progress_signal(run_rows)
+        if sig["ended"] != "alive":
+            play.journal_append(journal_path, {
+                "run_id": run_id, "cycle": cycle, "event": "stall_detected",
+                "ended": sig["ended"], "death_cause": sig["death_cause"],
+            })
+            play.log_stderr("cycle %d: in-run stop (%s) - ending run early" % (cycle, sig["ended"]))
+            break
 
         # Agent-owned pathing: after any placement, plan/repave ONE trunk from the DC
         # entrance connecting every building (auto_path), not per-building shortest hops.

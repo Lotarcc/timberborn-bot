@@ -221,7 +221,20 @@ def _evidence(lesson: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _confidence_from_evidence(confidence: float, evidence: dict[str, int]) -> float:
+# Lessons whose trigger starts with this prefix (agent/nlp/learn.py::
+# gap_lesson_from_diagnosis, docs/kb/learning-loop-design.md SS5.5) are a
+# structural-gap diagnosis, not an ordinary rule-based lesson: the real
+# deterministic expert also had nothing to propose, so this class of lesson is
+# ALWAYS all-loss by construction (a structural gap never "wins" until the code
+# is actually fixed). Persisting/recurring across runs is exactly the signal
+# that should escalate here, the opposite of the noise the win/loss-shaped
+# defaults below assume.
+_STRUCTURAL_GAP_TRIGGER_PREFIX = "structural_gap:"
+
+
+def _confidence_from_evidence(
+    confidence: float, evidence: dict[str, int], trigger: str = ""
+) -> float:
     runs = max(evidence["runs"], 1)
     win_rate = evidence["wins"] / runs
     loss_rate = evidence["losses"] / runs
@@ -229,9 +242,12 @@ def _confidence_from_evidence(confidence: float, evidence: dict[str, int]) -> fl
     if runs >= 3:
         adjusted += min(0.08, 0.01 * runs)
     adjusted = round(max(0.05, min(0.95, adjusted)), 3)
-    # An all-loss lesson (never once helped) is noise or an anti-pattern — never let
-    # it float near the top of the injected playbook. Hard-cap its confidence.
-    if evidence["wins"] == 0 and evidence["losses"] >= 1:
+    is_structural_gap = str(trigger).startswith(_STRUCTURAL_GAP_TRIGGER_PREFIX)
+    # An all-loss lesson (never once helped) is noise or an anti-pattern for an
+    # ordinary rule-based lesson — never let it float near the top of the
+    # injected playbook. Hard-cap its confidence. structural_gap:* lessons are
+    # exempt (see the module comment above this function).
+    if evidence["wins"] == 0 and evidence["losses"] >= 1 and not is_structural_gap:
         adjusted = min(adjusted, 0.2)
     return adjusted
 
@@ -243,12 +259,25 @@ MAX_PLAYBOOK_LESSONS = 12
 def _prune(lessons: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Drop persistent losers and cap the pool. A lesson seen in >=2 runs that has
     never once been a 'win' is noise (or a spurious cause->effect) — remove it so it
-    stops polluting the prompt and teaching the model falsehoods."""
+    stops polluting the prompt and teaching the model falsehoods.
+
+    structural_gap:* lessons are exempt from the persistent-all-loss drop (same
+    reasoning as _confidence_from_evidence above): they are all-loss by
+    construction, and dropping one after 2 runs would silently discard the exact
+    "still true every run" evidence docs/kb/learning-loop-design.md SS5.5 wants
+    surfaced, defeating the confidence exemption a few iterations later. They
+    still count against MAX_PLAYBOOK_LESSONS, so a runaway number of distinct
+    structural gaps can't grow the playbook unboundedly."""
     kept = []
     for lesson in lessons:
         ev = _evidence(lesson)
-        if ev["runs"] >= 2 and ev["wins"] == 0:
-            continue  # persistent all-loss => drop
+        trigger = str(lesson.get("trigger", ""))
+        if (
+            ev["runs"] >= 2
+            and ev["wins"] == 0
+            and not trigger.startswith(_STRUCTURAL_GAP_TRIGGER_PREFIX)
+        ):
+            continue  # persistent all-loss => drop (ordinary lessons only)
         kept.append(lesson)
     return kept[:MAX_PLAYBOOK_LESSONS]
 
@@ -292,7 +321,9 @@ def reconcile(existing: list[dict[str, Any]], proposed: list[dict[str, Any]], ru
         winner["evidence"] = evidence
         winner["created_run"] = created_run
         winner["last_seen_run"] = run_id if any(item.get("last_seen_run") == run_id for item in lessons) else last_seen_run
-        winner["confidence"] = _confidence_from_evidence(_number(winner.get("confidence"), 0.5), evidence)
+        winner["confidence"] = _confidence_from_evidence(
+            _number(winner.get("confidence"), 0.5), evidence, str(winner.get("trigger") or "")
+        )
         reconciled.append(winner)
 
     reconciled.sort(
