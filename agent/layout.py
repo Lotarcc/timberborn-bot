@@ -1056,16 +1056,131 @@ def plan_placements(specs, map_data, reservation, zones, state=None):
             protected_buildings,
         )
         if winner is None:
-            _note_skip(spec, "no candidate tile fit + had access + passed the boxing check")
+            # LP4: no GROUND tile worked in this zone -> try to build UP.
+            vertical = plan_vertical_placement(spec, map_data, reservation, zones, state)
+            if vertical:
+                placements.extend(vertical)
+                protected_buildings = protected_buildings + vertical
+                continue
+            _note_skip(spec, "no ground tile fit/access/boxing, and no vertical option")
             continue
 
         x, y, z, orientation = winner
         reservation.reserve(spec, x, y, z, orientation, owner=RESERVED)
-        placement = {"spec": spec, "x": x, "y": y, "z": z, "orientation": orientation}
+        placement = {"spec": spec, "x": x, "y": y, "z": z, "orientation": orientation,
+                     "role": "ground"}
         placements.append(placement)
         protected_buildings = protected_buildings + [placement]
 
     return placements
+
+
+# ---------------------------------------------------------------------------
+# LP4 -- verticality fallback (platform deck + stairs + stacking)
+# ---------------------------------------------------------------------------
+
+_PLATFORM_SPEC = "Platform"
+_STAIRS_SPEC = "SpiralStairs"
+
+
+def _stackable_top_cells(reservation):
+    """Occupied cells that are a stackable building/platform surface -- a
+    building can sit at (x, y, z+1) supported by them. Returns [(x, y, z)]."""
+    out = []
+    for cell, owner in reservation.cells.items():
+        if owner not in _STACKABLE_SUPPORT_OWNERS:
+            continue
+        spec_here = reservation._cell_spec.get(cell)
+        if spec_here is not None and reservation.is_stackable(spec_here):
+            out.append(cell)
+    return out
+
+
+def plan_vertical_placement(spec, map_data, reservation, zones, state=None):
+    """LP4 -- when `spec` cannot go on the GROUND in its zone (LP3 found no
+    tile), build UP. Returns an ORDERED sequence of placements
+    `[{spec,x,y,z,orientation,role}]` -- **support first** (the play loop must
+    build the platform/stairs before the stacked building; the game stalls a
+    stacked construction site until its support below is finished) -- or `[]`
+    if `spec` can't be stacked (its base needs bare ground) or no room exists.
+    Placements in the returned sequence are already RESERVED in `reservation`.
+
+    Strategies, in order:
+      1. DIRECT STACK -- place `spec` one Z above an existing stackable
+         building/platform whose whole top footprint is free and supports it
+         (housing-on-housing, a building on an existing platform deck).
+      2. PLATFORM DECK -- reserve a `Platform` under each of `spec`'s base cells
+         on free ground in its zone + a `SpiralStairs` access column adjacent,
+         then `spec` on the platform tops at `z = surface + 1`.
+    `fits()` enforces the real support rule (a "ground"-only base_matter spec
+    simply never fits at z+1, so it correctly returns [] here)."""
+    grid = _map_grid(map_data)
+    if grid["total"] <= 0 or not spec:
+        return []
+    terrain_at = terrain_height_lookup(map_data)
+    dc_xy = _district_center_xy(map_data, state, grid)
+    zone = zones.zone_for_spec(spec) if zones is not None else set()
+
+    def _dc_key(xy):
+        return abs(xy[0] - dc_xy[0]) + abs(xy[1] - dc_xy[1])
+
+    orientations = ("N", "E", "S", "W")
+
+    # 1. DIRECT STACK on an existing stackable top (nearest the DC first).
+    for (sx, sy, sz) in sorted(_stackable_top_cells(reservation),
+                               key=lambda c: _dc_key((c[0], c[1]))):
+        if zone and (sx, sy) not in zone:
+            continue  # keep the stack inside the spec's zone when we have one
+        for orient in orientations:
+            cz = sz + 1
+            if reservation.fits(spec, sx, sy, cz, orient, terrain_at):
+                reservation.reserve(spec, sx, sy, cz, orient, owner=RESERVED)
+                return [{"spec": spec, "x": sx, "y": sy, "z": cz,
+                         "orientation": orient, "role": "stacked"}]
+
+    # 2. PLATFORM DECK on free, flat ground in the zone.
+    sx_n, sy_n, _sz_n = reservation.size_of(spec)
+    tiles = sorted(zone, key=_dc_key) if zone else sorted(
+        _mask_to_xy(_reachable_land_mask(grid), grid), key=_dc_key)
+    for (px, py) in tiles:
+        surface = terrain_at(px, py)
+        if surface is None:
+            continue
+        surface = _as_int(surface)
+        deck = [(px + dx, py + dy) for dy in range(sy_n) for dx in range(sx_n)]
+        # every deck cell must be free, flat ground at the same surface height.
+        flat_free = all(
+            terrain_at(cx, cy) is not None
+            and _as_int(terrain_at(cx, cy)) == surface
+            and reservation.is_free([(cx, cy, surface)])
+            for (cx, cy) in deck
+        )
+        if not flat_free:
+            continue
+        # lay the platform deck, then verify the target fits on top.
+        for (cx, cy) in deck:
+            reservation.reserve(_PLATFORM_SPEC, cx, cy, surface, "N", owner=PLATFORM)
+        top_z = surface + 1
+        if not reservation.fits(spec, px, py, top_z, "N", terrain_at):
+            for (cx, cy) in deck:
+                reservation.free(_PLATFORM_SPEC, cx, cy, surface, "N")
+            continue
+        seq = [{"spec": _PLATFORM_SPEC, "x": cx, "y": cy, "z": surface,
+                "orientation": "N", "role": "support"} for (cx, cy) in deck]
+        # a stair access column on a free-ground tile orthogonally adjacent to the deck.
+        for (ax, ay) in ((px - 1, py), (px + sx_n, py), (px, py - 1), (px, py + sy_n)):
+            s = terrain_at(ax, ay)
+            if s is not None and _as_int(s) == surface and reservation.is_free([(ax, ay, surface)]):
+                reservation.reserve(_STAIRS_SPEC, ax, ay, surface, "N", owner=PATH)
+                seq.append({"spec": _STAIRS_SPEC, "x": ax, "y": ay, "z": surface,
+                            "orientation": "N", "role": "access"})
+                break
+        reservation.reserve(spec, px, py, top_z, "N", owner=RESERVED)
+        seq.append({"spec": spec, "x": px, "y": py, "z": top_z,
+                    "orientation": "N", "role": "stacked"})
+        return seq
+
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -1803,6 +1918,81 @@ class BoxingFrontierExhaustionTests(unittest.TestCase):
         placements = plan_placements(["Hut"], map_data, reservation, zones)
 
         self.assertEqual(placements, [])
+
+
+def _flat_map(width=12, height=12, surface=4, dc=(5, 5)):
+    total = width * height
+    return {"origin": {"x": 0, "z": 0}, "width": width, "height": height,
+            "terrain_height": [surface] * total, "occupied": [0] * total,
+            "water_depth": [0.0] * total, "reachable": [1] * total,
+            "on_road": [1] * total, "district_center": {"x": dc[0], "z": dc[1]}}
+
+
+class VerticalPlacementTests(unittest.TestCase):
+    """LP4 -- plan_vertical_placement direct-stack + platform-deck."""
+
+    def test_direct_stack_on_existing_stackable_building(self):
+        # A finished Lodge (stackable) -> a new Lodge stacks one Z above it.
+        res = Reservation(stacking=_TEST_STACKING)
+        res.reserve("Lodge", 5, 5, 4, "N", owner=BUILT)
+        m = _flat_map(dc=(5, 5))
+        seq = plan_vertical_placement("Lodge", m, res, None)
+        self.assertTrue(seq)
+        top = seq[-1]
+        self.assertEqual(top["spec"], "Lodge")
+        self.assertEqual(top["z"], 5)  # lodge_top(4) + 1
+        self.assertEqual(top["role"], "stacked")
+        # and it is actually supported by the lodge below (reserved by the call).
+        self.assertTrue(res.supported("Lodge", 5, 5, 5, "N", terrain_height_lookup(m)))
+
+    def test_platform_deck_when_no_stackable_top(self):
+        # No existing stackable surface -> platform deck + stairs + target on top.
+        res = Reservation(stacking=_TEST_STACKING)
+        m = _flat_map(dc=(5, 5))
+        # "Rooftop" (base_matter="stackable") can ONLY sit on a stackable surface,
+        # so it forces the platform-deck path.
+        seq = plan_vertical_placement("Rooftop", m, res, None)
+        self.assertTrue(seq)
+        self.assertEqual(seq[0]["spec"], _PLATFORM_SPEC)
+        self.assertEqual(seq[0]["role"], "support")
+        roles = [p["role"] for p in seq]
+        # support(s) come BEFORE the stacked building (build order matters).
+        self.assertEqual(roles[-1], "stacked")
+        self.assertLess(roles.index("support"), len(roles) - 1)
+        top = seq[-1]
+        self.assertEqual(top["spec"], "Rooftop")
+        self.assertEqual(top["z"], 5)  # surface(4) + 1
+        # an access stair column was added.
+        self.assertIn(_STAIRS_SPEC, [p["spec"] for p in seq])
+
+    def test_ground_only_spec_cannot_stack(self):
+        # base_matter "ground" -> never fits at z+1 -> no vertical option.
+        res = Reservation(stacking=_TEST_STACKING)
+        res.reserve("Lodge", 5, 5, 4, "N", owner=BUILT)  # a stackable top exists
+        m = _flat_map(dc=(5, 5))
+        seq = plan_vertical_placement("Shed", m, res, None)  # Shed base_matter=ground
+        self.assertEqual(seq, [])
+
+    def test_plan_placements_falls_back_to_vertical_when_ground_full(self):
+        # Fill the whole map with built cells so no ground tile fits, but leave a
+        # stackable Lodge to stack on -> plan_placements returns a stacked placement.
+        res = Reservation(stacking=_TEST_STACKING)
+        m = _flat_map(width=6, height=6, surface=4, dc=(2, 2))
+        # occupy every ground cell at surface, except the lodge footprint.
+        for y in range(6):
+            for x in range(6):
+                res.cells[(x, y, 4)] = BUILT
+                res._cell_spec[(x, y, 4)] = "Big"
+        # place a stackable lodge (overwrite its cells as a stackable surface)
+        for cell in res.footprint_cells("Lodge", 2, 2, 4, "N"):
+            res.cells[cell] = BUILT
+            res._cell_spec[cell] = "Lodge"
+        zones = assign_zones(m)
+        placements = plan_placements(["Lodge"], m, res, zones)
+        self.assertTrue(placements)
+        self.assertEqual(placements[-1]["spec"], "Lodge")
+        self.assertEqual(placements[-1].get("role"), "stacked")
+        self.assertEqual(placements[-1]["z"], 5)
 
 
 if __name__ == "__main__":
