@@ -1,0 +1,2017 @@
+{
+ "_meta": {
+  "source": "/blueprints (BlockObjectSpec.Size + BlockSpec.MatterBelow/Stackable)",
+  "game_version": "1.0.13.1",
+  "note": "stackable=can build on top; can_stack_on=base allows a stackable surface below"
+ },
+ "Chronometer": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ContaminationSensor": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DepthSensor": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Detonator": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FireworkLauncher": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FlowSensor": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Gate": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "HttpAdapter": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "HttpLever": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Indicator": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Lever": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Memory": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PopulationCounter": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PowerMeter": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Relay": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ResourceCounter": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ScienceCounter": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Speaker": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Timer": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "WeatherStation": {
+  "size": {
+   "x": 3,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BeaverStatue": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Bench": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BulletinPole": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Hammock": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Hedge": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Lantern": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PoleBanner": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Roof1x1": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Roof1x2": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Roof2x2": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Roof2x3": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Roof3x2": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Scarecrow": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Shrub": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "StreamGauge": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SquareBanner": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Weathervane": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "WoodFence": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BuildersHut": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DistrictCenter": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DistrictCrossing": {
+  "size": {
+   "x": 3,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "HaulingPost": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "AquaticFarmhouse": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Bakery": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Beehive": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "EfficientFarmHouse": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "GathererFlag": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Grill": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Gristmill": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DoubleLodge": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Lodge": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MiniLodge": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "TripleLodge": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ContaminationBarrier": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Dam": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DirtExcavator": {
+  "size": {
+   "x": 5,
+   "y": 6,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DoubleDynamite": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "DoubleFloodgate": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Dynamite": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "ExplosivesFactory": {
+  "size": {
+   "x": 2,
+   "y": 4,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Floodgate": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ImpermeableFloor": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Levee": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Sluice": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "TerrainBlock": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "TripleDynamite": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "TripleFloodgate": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Tunnel": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Valve": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FillValve": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Mine": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "ScavengerFlag": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Smelter": {
+  "size": {
+   "x": 2,
+   "y": 4,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BrazierOfBonding": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "EarthRecultivator": {
+  "size": {
+   "x": 7,
+   "y": 7,
+   "z": 8
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FarmerMonument": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FountainOfJoy": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DoublePlatform": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MetalPlatform3x3": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MetalPlatform5x5": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Overhang2x1": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Overhang3x1": {
+  "size": {
+   "x": 1,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Overhang4x1": {
+  "size": {
+   "x": 1,
+   "y": 4,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Overhang5x1": {
+  "size": {
+   "x": 1,
+   "y": 5,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Overhang6x1": {
+  "size": {
+   "x": 1,
+   "y": 6,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Platform": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SpiralStairs": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Stairs": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge1x1": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge2x1": {
+  "size": {
+   "x": 1,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge3x1": {
+  "size": {
+   "x": 1,
+   "y": 4,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge4x1": {
+  "size": {
+   "x": 1,
+   "y": 5,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge5x1": {
+  "size": {
+   "x": 1,
+   "y": 6,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SuspensionBridge6x1": {
+  "size": {
+   "x": 1,
+   "y": 7,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "TriplePlatform": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ZiplineBeam": {
+  "size": {
+   "x": 1,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ZiplinePylon": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ZiplineStation": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Clutch": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DevPowerGenerator": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "GeothermalEngine": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "GravityBattery": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LargeWindTurbine": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PowerShaft": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PowerWheel": {
+  "size": {
+   "x": 3,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "VerticalPowerShaft": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "WaterWheel": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "WindTurbine": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BotAssembler": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "BotPartFactory": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Inventor": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Observatory": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Refinery": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LargePile": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LargeTank": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LargeWarehouse": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MediumTank": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MediumWarehouse": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SmallPile": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SmallTank": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SmallWarehouse": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "UndergroundPile": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "AquiferDrill": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BadwaterDome": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BadwaterPump": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "BadwaterRig": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Centrifuge": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DevWaterSource": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "FluidDump": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LargeWaterPump": {
+  "size": {
+   "x": 3,
+   "y": 4,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "MechanicalFluidPump": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "WaterPump": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "Agora": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Campfire": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Carousel": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ContemplationSpot": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "DanceHall": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Detailer": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Herbalist": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Lido": {
+  "size": {
+   "x": 4,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "MedicalBed": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "MudPit": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RooftopTerrace": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "stackable"
+ },
+ "Shower": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "TeethGrindstone": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Forester": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "GearWorkshop": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LumberMill": {
+  "size": {
+   "x": 2,
+   "y": 3,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "LumberjackFlag": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PaperMill": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "PrintingPress": {
+  "size": {
+   "x": 2,
+   "y": 4,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "TappersShack": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "WoodWorkshop": {
+  "size": {
+   "x": 2,
+   "y": 4,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Dandelion": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Carrot": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Cattail": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Potato": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Spadderdock": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Sunflower": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Wheat": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "ChestnutTree": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Maple": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BlockOccupier": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "any"
+ },
+ "Path": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Blockage": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "GeothermalField": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "LargeRelic": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "MediumRelic": {
+  "size": {
+   "x": 3,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "NaturalDam": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "NaturalOverhang2x1": {
+  "size": {
+   "x": 1,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "NaturalOverhang3x1": {
+  "size": {
+   "x": 1,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "NaturalOverhang4x1": {
+  "size": {
+   "x": 1,
+   "y": 4,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ReservePile": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ReserveTank": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "ReserveWarehouse": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "Slope": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "SmallRelic": {
+  "size": {
+   "x": 2,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Thorns": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "UnstableCore": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "RuinColumnH1": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH2": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH3": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH4": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 4
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH5": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH6": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 6
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH7": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 7
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "RuinColumnH8": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 8
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "UndergroundRuins": {
+  "size": {
+   "x": 5,
+   "y": 5,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "StartingLocation": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ },
+ "AncientAquiferDrill": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 5
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Aquifer": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BadtideDrain": {
+  "size": {
+   "x": 1,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": true,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BadwaterSeep": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BadwaterSource": {
+  "size": {
+   "x": 3,
+   "y": 3,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "WaterSeep": {
+  "size": {
+   "x": 2,
+   "y": 2,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "WaterSource": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "BlueberryBush": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Birch": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 2
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Oak": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "Pine": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 3
+  },
+  "stackable": false,
+  "can_stack_on": false,
+  "base_matter": "ground"
+ },
+ "RecoveredGoodStack": {
+  "size": {
+   "x": 1,
+   "y": 1,
+   "z": 1
+  },
+  "stackable": false,
+  "can_stack_on": true,
+  "base_matter": "ground_or_stackable"
+ }
+}
