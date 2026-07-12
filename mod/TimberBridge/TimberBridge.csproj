@@ -22,6 +22,8 @@
     <Reference Include="$(TimberbornManaged)/Bindito.*.dll" Private="false" />
     <Reference Include="$(TimberbornManaged)/UnityEngine.*.dll" Private="false" />
     <Reference Include="$(TimberbornManaged)/Newtonsoft.Json.dll" Private="false" />
+    <!-- ImmutableArray<BlockSpec> (BlockObjectSpec.Blocks) for footprint/stacking exposure. -->
+    <Reference Include="$(TimberbornManaged)/System.Collections.Immutable.dll" Private="false" />
   </ItemGroup>
 
 </Project>
