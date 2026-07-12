@@ -1184,6 +1184,49 @@ def plan_vertical_placement(spec, map_data, reservation, zones, state=None):
 
 
 # ---------------------------------------------------------------------------
+# LP5 -- the persistent WHERE oracle the play loop consults
+# ---------------------------------------------------------------------------
+
+
+class LayoutPlanner:
+    """Persistent coordinated placement oracle held across play cycles.
+
+    The trained model + planner decide WHAT (a building spec); this decides
+    WHERE, coordinatedly: it keeps the per-category `Zones` (the stable "memory
+    of where you want what") for the whole run, and rebuilds the `Reservation`
+    from the LIVE game state every cycle -- so it's self-correcting: a placement
+    the bridge rejected (or one the agent never got to) simply isn't in next
+    cycle's built state, and no stale reservation accumulates. `place(spec)`
+    returns the coordinated ground placement, or a vertical
+    `[platform.., stairs, spec]` sequence when the zone's flat ground is full
+    (LP4). Empty until `reconcile` has seen a map with zones."""
+
+    def __init__(self):
+        self.reservation = Reservation()
+        self.zones = None
+
+    def reconcile(self, map_data, state=None):
+        """Assign zones once (first map seen), then rebuild the reservation's
+        built layer from the live `/state` + `/map` this cycle."""
+        if self.zones is None and isinstance(map_data, dict) and _as_int(map_data.get("width"), 0) > 0:
+            self.zones = assign_zones(map_data, state)
+        self.reservation = Reservation()  # fresh built layer each cycle (self-correcting)
+        self.reservation.reconcile_from_state(state)
+        self.reservation.reconcile_from_map(map_data)
+
+    def place(self, spec, map_data, state=None, batch=None):
+        """Coordinated placement(s) for `spec` (or a `batch` of specs placed
+        together). Returns `[{spec,x,y,z,orientation,role}, ...]` -- one ground
+        placement per spec, or a vertical support-first sequence, or [] if
+        nothing fits. Reservations for the returned placements are held so a
+        multi-spec batch coordinates within the call."""
+        if self.zones is None:
+            return []
+        specs = batch if batch else [spec]
+        return plan_placements(specs, map_data, self.reservation, self.zones, state)
+
+
+# ---------------------------------------------------------------------------
 # inline tests
 # ---------------------------------------------------------------------------
 

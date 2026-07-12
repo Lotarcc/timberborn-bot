@@ -21,7 +21,7 @@ import os
 import time
 from typing import List, Optional, Tuple
 
-from agent import auto_path, controller, curriculum, game_schema, planner, play, replay, time_manager
+from agent import auto_path, controller, curriculum, game_schema, layout, planner, play, replay, time_manager
 from agent.nlp import labeler
 from agent.nlp.policy import DecisionPolicy
 
@@ -53,8 +53,28 @@ def _find_unreachable(state) -> Optional[dict]:
     return None
 
 
+def _place_via_bridge(bridge, spec, x, y, z, orientation) -> bool:
+    """Place one building; retry once at the bridge's suggested nearest_valid tile.
+    Returns True only if the bridge ACCEPTS (body.ok). auto_connect:false -> the AGENT
+    owns pathing (one DC-rooted trunk via auto_path)."""
+    ax, ay, az, ao = x, y, z, orientation
+    for _retry in range(2):
+        args = {"spec": spec, "x": ax, "y": ay, "z": az, "auto_connect": False}
+        if ao:
+            args["orientation"] = ao
+        status, body = bridge.act("place_building", args)
+        if status == 200 and isinstance(body, dict) and body.get("ok") is True:
+            return True
+        sugg = ((body.get("suggestion") or {}).get("nearest_valid")
+                if isinstance(body, dict) else None)
+        if not isinstance(sugg, dict):
+            return False
+        ax, ay, az, ao = sugg.get("x"), sugg.get("y", sugg.get("z")), sugg.get("z"), sugg.get("orientation")
+    return False
+
+
 def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
-                    state: dict, map_data: dict, resources) -> Tuple[str, float, bool]:
+                    state: dict, map_data: dict, resources, layout_planner=None) -> Tuple[str, float, bool]:
     """Walk ranked intents; execute the first one that is actionable. Returns
     (intent, confidence, executed).
 
@@ -112,39 +132,32 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
             continue
         if goal.get("affordable") is False and goal.get("free") is not True:
             continue
-        # candidates_for takes the resolved GOAL DICT (carries the real spec), not the raw
-        # model id - the raw id is not a key of planner.GOAL_SPECS and would mis-resolve.
-        cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
-        if not cands:
-            continue
         resolved_id = goal.get("id")
-        # Try each candidate, and if the bridge rejects a tile as invalid it usually returns a
-        # `suggestion.nearest_valid` - retry there once. CRITICAL: only report executed=True when
-        # the bridge actually ACCEPTS (body.ok is True). The old code ignored the response and
-        # returned executed=True on a rejected placement, which froze the loop: it "built" a
-        # phantom lodge every cycle, never advanced time, and never housed anyone.
-        placed = False
-        for c in cands:
-            # auto_connect:false -> the AGENT owns pathing (one DC-rooted trunk via auto_path).
-            attempt = c
-            for _retry in range(2):  # the candidate tile, then the bridge's nearest_valid suggestion
-                args = {"spec": spec, "x": attempt.get("x"), "y": attempt.get("y", attempt.get("z")),
-                        "z": attempt.get("z"), "auto_connect": False}
-                if attempt.get("orientation"):
-                    args["orientation"] = attempt["orientation"]
-                status, body = bridge.act("place_building", args)
-                if status == 200 and isinstance(body, dict) and body.get("ok") is True:
-                    placed = True
-                    break
-                sugg = ((body.get("suggestion") or {}).get("nearest_valid")
-                        if isinstance(body, dict) else None)
-                if not isinstance(sugg, dict):
-                    break
-                attempt = sugg  # retry once at the bridge-suggested valid tile
-            if placed:
-                break
-        if not placed:
+        # LP5: the LayoutPlanner decides WHERE - zone-aware (right region per building type),
+        # boxing-aware (won't seal off a neighbour), and it STACKS vertically (platform deck +
+        # stairs) when the zone's flat ground is full. It returns a ground placement, or a
+        # support-first [platform.., stairs, building] sequence (the game stalls a stacked site
+        # until its support finishes, so we place them in that order). Fall back to the legacy
+        # candidate scorer if the planner has nothing.
+        placements = layout_planner.place(spec, map_data, state) if layout_planner is not None else []
+        if not placements:
+            cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
+            if cands:
+                c = cands[0]
+                placements = [{"spec": spec, "x": c.get("x"), "y": c.get("y", c.get("z")),
+                               "z": c.get("z"), "orientation": c.get("orientation")}]
+        if not placements:
             continue  # no valid tile for this spec right now; fall through to the next ranked intent
+        # Place the whole sequence (supports first). Only report executed when the TARGET
+        # building actually lands (its site can be queued even if a platform below is still
+        # building). CRITICAL: only executed=True on a real bridge ok - never on a rejection.
+        target_placed = False
+        for p in placements:
+            ok = _place_via_bridge(bridge, p["spec"], p.get("x"), p.get("y"), p.get("z"), p.get("orientation"))
+            if ok and str(p.get("spec")).split(".")[0] == str(spec).split(".")[0]:
+                target_placed = True
+        if not target_placed:
+            continue
         for fu in followups.get(resolved_id, []) or []:
             if isinstance(fu, dict) and fu.get("action"):
                 bridge.act(fu["action"], fu.get("args") or {})
@@ -156,6 +169,9 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
 def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
     bridge = play.Bridge(cfg["BRIDGE_URL"])
     policy = DecisionPolicy.load()
+    # LP5: the persistent WHERE oracle - zones assigned once, reservation rebuilt from the
+    # live state each cycle. Owns coordinated + vertical placement (see agent/layout.py).
+    layout_planner = layout.LayoutPlanner()
     journal_dir = os.path.join(AGENT_DIR, "journal")
     os.makedirs(journal_dir, exist_ok=True)
     journal_path = os.path.join(journal_dir, "%s.jsonl" % run_id)
@@ -219,6 +235,13 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
         except Exception:
             pass
 
+        # Refresh the layout planner from the live state (assigns zones on the first map,
+        # then rebuilds the reservation's built layer each cycle - self-correcting).
+        try:
+            layout_planner.reconcile(map_data, state)
+        except Exception as exc:
+            play.log_stderr("  layout reconcile failed: %s" % exc)
+
         ranked = policy.rank(state)
         raw_top = ranked[0][0]  # the RAW model pick, before biasing - the true fidelity signal
         # Curriculum biasing: promote the current phase's priority goals to the front of
@@ -243,7 +266,8 @@ def run(cfg: dict, run_id: str, max_cycles: int = 40) -> dict:
         if raw_top == expert_top:
             agree += 1
 
-        intent, conf, executed = _execute_intent(bridge, ranked, report, state, map_data, resources)
+        intent, conf, executed = _execute_intent(bridge, ranked, report, state, map_data, resources,
+                                                  layout_planner)
 
         play.journal_append(journal_path, {
             "run_id": run_id, "cycle": cycle, "event": "decision",
