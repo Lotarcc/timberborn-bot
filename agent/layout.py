@@ -1225,6 +1225,51 @@ class LayoutPlanner:
         specs = batch if batch else [spec]
         return plan_placements(specs, map_data, self.reservation, self.zones, state)
 
+    def place_at_candidates(self, spec, candidate_tiles, map_data, state=None):
+        """WRAP the planner's own (specialized: water-edge pump, moist farm,
+        resource-radius flag) candidate tiles with the reservation's
+        footprint-fit + BOXING check, PRESERVING each candidate's exact
+        x/y/z/orientation -- so we keep the good specialized placement AND gain
+        coordination (won't overlap this cycle's other placements or the built
+        state) + boxing-avoidance. If NO specialized candidate fits without
+        boxing (or there are none -- the zone's flat ground is full), fall back
+        to LP4 verticality (`plan_vertical_placement`). `candidate_tiles` is the
+        list of dicts `planner.candidates_for` returns."""
+        grid = _map_grid(map_data)
+        if grid["total"] <= 0:
+            return []
+        terrain_at = terrain_height_lookup(map_data)
+        dc_xy = _district_center_xy(map_data, state, grid)
+        protected = _existing_buildings_for_boxing(state)
+        for c in candidate_tiles or []:
+            if not isinstance(c, dict):
+                continue
+            x = _as_int(c.get("x"))
+            y = _as_int(c.get("y", c.get("z")))
+            z = c.get("z")
+            z = _as_int(z) if z is not None else terrain_at(x, y)
+            if z is None:
+                continue
+            orient = _normalize_orientation(c.get("orientation"))
+            # OVERLAP only (coordination) -- NOT supported(): candidates_for already
+            # validated this tile against the live game (e.g. a water pump's footprint
+            # legitimately overhangs water, which our per-spec ground check would wrongly
+            # reject), and the bridge re-validates support + suggests nearest_valid at
+            # place time. We only need to avoid colliding with what we/the colony placed.
+            if not self.reservation.is_free(
+                    self.reservation.footprint_cells(spec, x, y, z, orient)):
+                continue
+            self.reservation.reserve(spec, x, y, z, orient, owner=RESERVED)
+            ok, _frontier = _boxing_check(
+                self.reservation, map_data, grid, terrain_at, dc_xy, protected)
+            if not ok:
+                self.reservation.free(spec, x, y, z, orient)
+                continue
+            return [{"spec": spec, "x": x, "y": y, "z": z,
+                     "orientation": orient, "role": "ground"}]
+        # nothing specialized fit -> build up.
+        return plan_vertical_placement(spec, map_data, self.reservation, self.zones, state)
+
 
 # ---------------------------------------------------------------------------
 # inline tests

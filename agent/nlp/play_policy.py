@@ -133,19 +133,23 @@ def _execute_intent(bridge, ranked: List[Tuple[str, float]], report: dict,
         if goal.get("affordable") is False and goal.get("free") is not True:
             continue
         resolved_id = goal.get("id")
-        # LP5: the LayoutPlanner decides WHERE - zone-aware (right region per building type),
-        # boxing-aware (won't seal off a neighbour), and it STACKS vertically (platform deck +
-        # stairs) when the zone's flat ground is full. It returns a ground placement, or a
+        # candidates_for gives the SPECIALIZED tiles (water-edge pump, moist farm, resource-
+        # radius flag, ...). The LayoutPlanner then WRAPS them: keeps each candidate's exact
+        # tile+orientation but adds footprint-fit + coordination (won't overlap this cycle's
+        # other placements/built state) + a BOXING check (won't seal off a neighbour), and if
+        # none fit it STACKS vertically (platform deck + stairs). This preserves the good
+        # specialized placement AND adds the layout awareness. Returns a ground placement or a
         # support-first [platform.., stairs, building] sequence (the game stalls a stacked site
-        # until its support finishes, so we place them in that order). Fall back to the legacy
-        # candidate scorer if the planner has nothing.
-        placements = layout_planner.place(spec, map_data, state) if layout_planner is not None else []
-        if not placements:
-            cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
-            if cands:
-                c = cands[0]
-                placements = [{"spec": spec, "x": c.get("x"), "y": c.get("y", c.get("z")),
-                               "z": c.get("z"), "orientation": c.get("orientation")}]
+        # until its support finishes, so we place in that order).
+        cands = planner.candidates_for(goal, state, map_data, k=6, resources=resources)
+        if layout_planner is not None:
+            placements = layout_planner.place_at_candidates(spec, cands, map_data, state)
+        elif cands:
+            c = cands[0]
+            placements = [{"spec": spec, "x": c.get("x"), "y": c.get("y", c.get("z")),
+                           "z": c.get("z"), "orientation": c.get("orientation")}]
+        else:
+            placements = []
         if not placements:
             continue  # no valid tile for this spec right now; fall through to the next ranked intent
         # Place the whole sequence (supports first). Only report executed when the TARGET
